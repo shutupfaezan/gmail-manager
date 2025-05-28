@@ -100,14 +100,22 @@ export async function batchModifyMessages(accessToken, messageIds, { addLabelIds
     // or we handle it here. Let's assume authenticatedFetch will throw for non-2xx.
     return authenticatedFetch(accessToken, url, { method: 'POST', body, headers: { 'Content-Type': 'application/json' } });
 }
-// /**
-//  * Extracts the sender's email from a message's 'From' header.
-//  * @param {string} fromHeader - The 'From' header string (e.g., "Sender Name <sender@example.com>").
-//  * @returns {string|null} The sender's email address or null if not found.
-//  */
 
-export function extractSenderEmail(fromHeader) {
-    if (!fromHeader) return null;
-    const match = fromHeader.match(/<([^>]+)>/);
-    return match ? match[1] : fromHeader; // Fallback to the whole string if no <...> found
+/**
+ * Creates a new filter.
+ * @param {string} accessToken - The Google API access token.
+ * @param {object} filter - The filter object to create.
+ * @param {object} filter.criteria - Criteria for the filter (e.g., {from: "user@example.com"}).
+ * @param {object} filter.action - Action to perform (e.g., {addLabelIds: ["TRASH"], removeLabelIds: ["INBOX"]}).
+ * @returns {Promise<object>} A promise that resolves to the API response (the created filter).
+ */
+export async function createFilter(accessToken, filter) {
+    const url = `${GMAIL_API_BASE_URL}/settings/filters`;
+    const body = JSON.stringify(filter);
+
+    return authenticatedFetch(accessToken, url, {
+        method: 'POST',
+        body,
+        headers: { 'Content-Type': 'application/json' },
+    });
 }

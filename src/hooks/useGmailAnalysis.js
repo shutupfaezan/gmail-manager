@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useGmailApi } from './useGmailApi'; // Assuming useGmailApi is in the same hooks folder
-import { sleep, normalizeDomain, getISOWeek } from '../utils/gmailUtils'; // Adjust path if utils are elsewhere
+import { sleep, normalizeDomain, getISOWeek, extractHttpUnsubscribeLink, extractSenderEmail } from '../utils/gmailUtils'; // Adjust path if utils are elsewhere
 
 const STAGE1_PAGE_SIZE = 500;
 const LIFETIME_ID_FETCH_PAGE_SIZE = 50;
@@ -18,9 +18,20 @@ export function useGmailAnalysis(accessToken) {
     const [deletingEmailIds, setDeletingEmailIds] = useState(new Set());
     const [actionMessage, setActionMessage] = useState('');
     const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+    const [unsubscribeState, setUnsubscribeState] = useState({
+        senderDomain: null,
+        isLoading: false,
+        link: null,
+        message: null,
+    });
+    const [filterCreationState, setFilterCreationState] = useState({
+        senderIdentifier: null, // Can be domain or specific email
+        isLoading: false,
+        message: null,
+    });
 
     const isFetchingLifetimeRef = useRef(isFetchingLifetime);
-    const { listMessages, getMessageDetails, trashMessage, batchTrashMessages } = useGmailApi(accessToken);
+    const { listMessages, getMessageDetails, trashMessage, batchTrashMessages, createFilter } = useGmailApi(accessToken);
 
     useEffect(() => {
         isFetchingLifetimeRef.current = isFetchingLifetime;
@@ -39,6 +50,8 @@ export function useGmailAnalysis(accessToken) {
         setIsFetchingLifetime(false);
         setLifetimeEmailsDisplay([]);
         setActionMessage('');
+        setUnsubscribeState({ senderDomain: null, isLoading: false, link: null, message: null });
+        setFilterCreationState({ senderIdentifier: null, isLoading: false, message: null });
         setProgress('Stage 1: Initializing 7-day analysis...');
 
         const sevenDaysAgo = new Date();
@@ -239,6 +252,97 @@ export function useGmailAnalysis(accessToken) {
         }
     }, [trashMessage]);
 
+    const handleAttemptUnsubscribe = useCallback(async (senderDomain) => {
+        if (!listMessages || !getMessageDetails) {
+            setUnsubscribeState({ senderDomain, isLoading: false, link: null, message: "API functions not available." });
+            return;
+        }
+        setUnsubscribeState({ senderDomain, isLoading: true, link: null, message: `Searching for unsubscribe link for ${senderDomain}...` });
+        setActionMessage(''); // Clear other action messages
+
+        try {
+            const query = `from:${senderDomain} in:inbox`;
+            // Fetch only one message to find the header
+            const listData = await listMessages(query, null, 1, "messages/id");
+
+            if (!listData.messages || listData.messages.length === 0) {
+                setUnsubscribeState({ senderDomain, isLoading: false, link: null, message: `No recent emails found from ${senderDomain} to check for unsubscribe link.` });
+                return;
+            }
+
+            const messageId = listData.messages[0].id;
+            const msgData = await getMessageDetails(messageId); // This will now request 'List-Unsubscribe' by default
+
+            const listUnsubscribeHeader = msgData.payload?.headers?.find(h => h.name.toLowerCase() === 'list-unsubscribe');
+
+            if (listUnsubscribeHeader && listUnsubscribeHeader.value) {
+                const httpLink = extractHttpUnsubscribeLink(listUnsubscribeHeader.value);
+                if (httpLink) {
+                    setUnsubscribeState({ senderDomain, isLoading: false, link: httpLink, message: `Unsubscribe link found for ${senderDomain}.` });
+                } else {
+                    setUnsubscribeState({ senderDomain, isLoading: false, link: null, message: `No direct HTTP/HTTPS unsubscribe link found in headers for ${senderDomain}. There might be a mailto: link or one in the email body.` });
+                }
+            } else {
+                setUnsubscribeState({ senderDomain, isLoading: false, link: null, message: `No List-Unsubscribe header found for ${senderDomain}.` });
+            }
+        } catch (e) {
+            console.error(`Error attempting to find unsubscribe link for ${senderDomain}:`, e);
+            setUnsubscribeState({ senderDomain, isLoading: false, link: null, message: `Error finding unsubscribe link: ${e.message}` });
+        }
+    }, [listMessages, getMessageDetails, extractHttpUnsubscribeLink]);
+
+    const openUnsubscribePage = useCallback((url) => {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        setActionMessage(`Opened unsubscribe page for ${unsubscribeState.senderDomain} in a new tab.`);
+        // Optionally reset unsubscribeState or parts of it
+        setUnsubscribeState(prevState => ({ ...prevState, link: null, message: `Action initiated for ${prevState.senderDomain}. Please complete in the new tab.` }));
+    }, [unsubscribeState.senderDomain]);
+
+    const handleCreateFilterForSender = useCallback(async (senderDomainOrEmail) => {
+        if (!listMessages || !getMessageDetails || !createFilter) {
+            setFilterCreationState({ senderIdentifier: senderDomainOrEmail, isLoading: false, message: "API functions not available for filtering." });
+            return;
+        }
+        setFilterCreationState({ senderIdentifier: senderDomainOrEmail, isLoading: true, message: `Preparing to create filter for ${senderDomainOrEmail}...` });
+        setActionMessage(''); // Clear other action messages
+
+        try {
+            // Step 1: Get a specific sender email address if we only have a domain
+            let specificSenderEmail = senderDomainOrEmail;
+            if (!senderDomainOrEmail.includes('@')) { // Likely a domain
+                setFilterCreationState(prev => ({ ...prev, message: `Fetching specific email address for domain ${senderDomainOrEmail}...` }));
+                const listData = await listMessages(`from:${senderDomainOrEmail} in:inbox`, null, 1, "messages(id,payload/headers)");
+                if (!listData.messages || listData.messages.length === 0) {
+                    setFilterCreationState({ senderIdentifier: senderDomainOrEmail, isLoading: false, message: `No recent emails found from ${senderDomainOrEmail} to determine exact sender address.` });
+                    return;
+                }
+                const msgData = await getMessageDetails(listData.messages[0].id);
+                const fromHeader = msgData.payload?.headers?.find(h => h.name.toLowerCase() === 'from');
+                if (!fromHeader || !fromHeader.value) {
+                    setFilterCreationState({ senderIdentifier: senderDomainOrEmail, isLoading: false, message: `Could not extract 'From' header for ${senderDomainOrEmail}.` });
+                    return;
+                }
+                specificSenderEmail = extractSenderEmail(fromHeader.value);
+                if (!specificSenderEmail) {
+                    setFilterCreationState({ senderIdentifier: senderDomainOrEmail, isLoading: false, message: `Could not parse specific email address from ${fromHeader.value}.` });
+                    return;
+                }
+            }
+
+            setFilterCreationState(prev => ({ ...prev, senderIdentifier: specificSenderEmail, message: `Creating filter for ${specificSenderEmail} to send to Trash...` }));
+
+            const filterCriteria = { from: specificSenderEmail };
+            const filterAction = { addLabelIds: ['TRASH'], removeLabelIds: ['INBOX'] };
+
+            await createFilter(filterCriteria, filterAction);
+            setFilterCreationState({ senderIdentifier: specificSenderEmail, isLoading: false, message: `Filter created successfully! Future emails from ${specificSenderEmail} will go to Trash.` });
+
+        } catch (e) {
+            console.error(`Error creating filter for ${senderDomainOrEmail}:`, e);
+            setFilterCreationState({ senderIdentifier: senderDomainOrEmail, isLoading: false, message: `Error creating filter: ${e.message}. It might already exist with the same criteria.` });
+        }
+    }, [listMessages, getMessageDetails, createFilter, extractSenderEmail]);
+
     const handleTrashAllFromSender = useCallback(async (senderDomain) => {
         // eslint-disable-next-line no-restricted-globals
         if (!confirm(`Are you sure you want to move ALL emails from "${senderDomain}" to Trash? This action might take a while and cannot be easily undone.`)) {
@@ -314,10 +418,15 @@ export function useGmailAnalysis(accessToken) {
         deletingEmailIds,
         actionMessage,
         isBatchProcessing,
+        unsubscribeState, // Present
+        filterCreationState, // Added
         performStage1Analysis, // For retry button
         handleSenderSelectionForLifetime,
         handleStopLifetimeFetch,
         handleTrashEmail,
         handleTrashAllFromSender,
+        handleAttemptUnsubscribe,
+        openUnsubscribePage,
+        handleCreateFilterForSender, // Added
     };
 }

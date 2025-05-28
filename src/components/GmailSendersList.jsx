@@ -14,11 +14,16 @@ function GmailSendersList({ accessToken }) {
         deletingEmailIds,
         actionMessage,
         isBatchProcessing, // New state for batch operations
+        unsubscribeState, // New state for unsubscribe feature
+        filterCreationState, // New state for filter creation
         performStage1Analysis, // For retry
         handleSenderSelectionForLifetime,
         handleStopLifetimeFetch,
         handleTrashEmail,
         handleTrashAllFromSender, // New handler
+        handleAttemptUnsubscribe, // New handler for unsubscribe
+        openUnsubscribePage,      // New handler for opening unsubscribe page
+        handleCreateFilterForSender, // New handler for creating filters
     } = useGmailAnalysis(accessToken);
 
     // --- UI Rendering ---
@@ -33,16 +38,16 @@ function GmailSendersList({ accessToken }) {
                 </div>
             );
         }
-        // Show progress if Stage 1 is loading OR lifetime emails are being fetched OR batch processing
-        if (isLoading || isFetchingLifetime || isBatchProcessing) {
+        // Show progress if Stage 1 is loading OR lifetime emails are being fetched OR batch processing OR unsubscribe loading
+        if (isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
             return (
                 <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #007bff', borderRadius: '5px', backgroundColor: '#e7f3ff', color: '#004085', textAlign: 'center' }}>
-                    {progress || "Processing..."}
+                    {filterCreationState.isLoading ? filterCreationState.message : progress || "Processing..."}
                 </div>
             );
         }
         // Show final progress/status message if no error and not actively loading
-        if (progress && !isLoading && !isFetchingLifetime && !isBatchProcessing && !error) {
+        if (progress && !isLoading && !isFetchingLifetime && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && !error) {
             return (
                 <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '5px', backgroundColor: '#f8f9fa', color: '#333', textAlign: 'center' }}>
                     Status: {progress}
@@ -54,11 +59,25 @@ function GmailSendersList({ accessToken }) {
 
     const renderActionStatus = () => {
         if (!actionMessage) return null;
+        const isError = actionMessage.toLowerCase().startsWith("error");
         return (
-            <div style={{ padding: '10px', margin: '10px 0', border: '1px solid #007bff', borderRadius: '5px', backgroundColor: actionMessage.startsWith("Error") ? '#ffebee' : '#e7f3ff', color: actionMessage.startsWith("Error") ? 'red' : '#004085', textAlign: 'center' }}>
+            <div style={{ padding: '10px', margin: '10px 0', border: `1px solid ${isError ? 'red' : '#007bff'}`, borderRadius: '5px', backgroundColor: isError ? '#ffebee' : '#e7f3ff', color: isError ? 'red' : '#004085', textAlign: 'center' }}>
                 {actionMessage}
             </div>
         );
+    };
+
+    const renderUnsubscribeStatus = () => {
+        if (!unsubscribeState.senderDomain || (!unsubscribeState.isLoading && !unsubscribeState.message && !unsubscribeState.link)) return null;
+        // This message will be shown near the sender card or globally, depending on where you want it.
+        // For now, let's assume it's a global message shown below the action status.
+        return <div style={{ padding: '10px', margin: '10px 0', border: '1px solid #17a2b8', borderRadius: '5px', backgroundColor: '#d1ecf1', color: '#0c5460', textAlign: 'center' }}>{unsubscribeState.isLoading ? `Checking unsubscribe for ${unsubscribeState.senderDomain}...` : unsubscribeState.message}</div>;
+    };
+
+    const renderFilterCreationStatus = () => {
+        if (!filterCreationState.senderIdentifier || (!filterCreationState.isLoading && !filterCreationState.message)) return null;
+        const isError = filterCreationState.message && filterCreationState.message.toLowerCase().startsWith("error");
+        return <div style={{ padding: '10px', margin: '10px 0', border: `1px solid ${isError ? 'red' : '#28a745'}`, borderRadius: '5px', backgroundColor: isError ? '#ffebee' : '#e6ffed', color: isError ? 'red' : '#155724', textAlign: 'center' }}>{filterCreationState.isLoading ? `Processing filter for ${filterCreationState.senderIdentifier}...` : filterCreationState.message}</div>;
     };
 
     // Confirmation for trashing email is good to keep in the component
@@ -79,9 +98,11 @@ function GmailSendersList({ accessToken }) {
         <div>
             {renderStatusBar()}
             {renderActionStatus()}
+            {renderFilterCreationStatus()}
+            {renderUnsubscribeStatus()}
 
             {/* If there was an error, and we're not in Stage 1 loading, show retry button */}
-            {error && !isLoading && !isFetchingLifetime && !isBatchProcessing && (
+            {error && !isLoading && !isFetchingLifetime && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && (
                  <button onClick={performStage1Analysis} style={{ marginBottom: '15px', padding: '8px 15px' }}>Retry Full Analysis</button>
             )}
 
@@ -109,14 +130,43 @@ function GmailSendersList({ accessToken }) {
                                     <h3 style={{ marginTop: 0, marginBottom: '8px', fontSize: '1.1em' }}>{domain}</h3>
                                     <p style={{ fontSize: '0.9em', color: '#555', marginBottom: '12px' }}>30-Day Total: <strong>{totalForDomain}</strong></p>
                                     {/* Weekly breakdown removed */}
+                                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     <button 
                                         onClick={() => handleSenderSelectionForLifetime(domain)} 
-                                        disabled={isLoading || isFetchingLifetime || isBatchProcessing} // Disable if any global loading is happening
-                                        style={{ marginTop: 'auto', paddingTop: '8px', paddingBottom: '8px' }}
+                                        disabled={isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading}
+                                        style={{ paddingTop: '8px', paddingBottom: '8px' }}
                                     >
                                         Analyze Lifetime Emails
                                     </button>
+                                    {/* Revert temporary change and add debug info */}
+                                    {unsubscribeState.senderDomain === domain && unsubscribeState.link ? (
+                                        <button onClick={() => openUnsubscribePage(unsubscribeState.link)} style={{ paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#28a745', color: 'white' }}>
+                                            Open Unsubscribe Page
+                                        </button>
+                                    ) : ( // This is the button that should show initially
+                                        <button 
+                                            onClick={() => handleAttemptUnsubscribe(domain)}
+                                            disabled={isLoading || isFetchingLifetime || isBatchProcessing || filterCreationState.isLoading || (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain)}
+                                            style={{ paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#17a2b8', color: 'white' }}
+                                        >
+                                            {/* Show 'Checking...' only for the specific sender being processed */}
+                                            {unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 'Checking...' : 'Unsubscribe'} 
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => handleCreateFilterForSender(domain)}
+                                        disabled={isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || (filterCreationState.isLoading && filterCreationState.senderIdentifier === domain)}
+                                        style={{ paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#6f42c1', color: 'white' }}
+                                    >
+                                        {filterCreationState.isLoading && filterCreationState.senderIdentifier === domain ? 'Filtering...' : 'Filter to Trash'}
+                                    </button>
+                                    {/* Debugging output */}
+                                    {/* <p style={{fontSize: '0.7em', color: 'purple'}}>
+                                        Debug: unsubscribeState.senderDomain="{unsubscribeState.senderDomain}", domain="{domain}", link="{unsubscribeState.link ? 'Found' : 'None'}"
+                                    </p> */}
                                 </div>
+                                </div>
+                            
                             );
                         })}
                     </div>
@@ -129,7 +179,7 @@ function GmailSendersList({ accessToken }) {
                         <h2>Lifetime Emails from: {selectedSenderForLifetime}</h2>
                         <button
                             onClick={() => handleTrashAllFromSender(selectedSenderForLifetime)}
-                            disabled={isFetchingLifetime || isLoading || isBatchProcessing || lifetimeEmailsDisplay.length === 0 && !isFetchingLifetime}
+                            disabled={isFetchingLifetime || isLoading || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading || (lifetimeEmailsDisplay.length === 0 && !isFetchingLifetime)}
                             style={{ 
                                 padding: '8px 15px', 
                                 backgroundColor: '#dc3545', 
@@ -142,7 +192,7 @@ function GmailSendersList({ accessToken }) {
                             {isBatchProcessing ? 'Trashing All...' : `Trash All From ${selectedSenderForLifetime}`}
                         </button>
                     </div>
-                    {(isFetchingLifetime || isBatchProcessing) && ( // Show loading status if fetching lifetime or batch processing
+                    {(isFetchingLifetime || isBatchProcessing || (unsubscribeState.isLoading && unsubscribeState.senderDomain === selectedSenderForLifetime) || (filterCreationState.isLoading && filterCreationState.senderIdentifier === selectedSenderForLifetime)) && (
                         <div>
                             <p>{progress || (isFetchingLifetime ? `Loading lifetime emails... Displayed: ${lifetimeEmailsDisplay.length}` : "Processing batch operation...")}</p>
                             {isFetchingLifetime && <button onClick={handleStopLifetimeFetch} disabled={isBatchProcessing}>Stop Loading</button>}
@@ -160,7 +210,7 @@ function GmailSendersList({ accessToken }) {
                                 </div>
                                 <button 
                                     onClick={() => confirmAndTrashEmail(email.id, email.subject)}
-                                    disabled={isDeleting || isFetchingLifetime || isBatchProcessing}
+                                    disabled={isDeleting || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading}
                                     style={{ padding: '5px 10px', backgroundColor: isDeleting ? 'grey' : '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                                 >
                                     {isDeleting ? 'Trashing...' : 'Trash'}
@@ -168,7 +218,7 @@ function GmailSendersList({ accessToken }) {
                             </div>
                         );
                     })}
-                    {!isFetchingLifetime && !isBatchProcessing && lifetimeEmailsDisplay.length > 0 && !progress.includes("Fetching page") && !progress.includes("Stopping") && ( // Check progress to avoid showing this mid-fetch or on stop
+                    {!isFetchingLifetime && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && lifetimeEmailsDisplay.length > 0 && !progress.includes("Fetching page") && !progress.includes("Stopping") && (
                         <p style={{marginTop: '10px', fontStyle: 'italic'}}>
                             {`Displayed: ${lifetimeEmailsDisplay.length} emails. ${progress.includes("No more") || progress.includes("All available") ? progress : ''}`}
                         </p>
@@ -176,7 +226,7 @@ function GmailSendersList({ accessToken }) {
                 </section>
             )}
             {/* Display message if analysis is complete (or errored early) and no data is shown */}
-             {currentStage === 0 && !isLoading && !isBatchProcessing && Object.keys(stage1SenderData).length === 0 && lifetimeEmailsDisplay.length === 0 && (
+             {currentStage === 0 && !isLoading && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && Object.keys(stage1SenderData).length === 0 && lifetimeEmailsDisplay.length === 0 && (
                 <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
             )}
         </div>

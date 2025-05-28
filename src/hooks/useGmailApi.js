@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { listMessages as serviceListMessages, getMessage as serviceGetMessage, trashMessage as serviceTrashMessage, batchModifyMessages as serviceBatchModifyMessages } from '../services/gmailService';
+import { listMessages as serviceListMessages, getMessage as serviceGetMessage, trashMessage as serviceTrashMessage, batchModifyMessages as serviceBatchModifyMessages, createFilter as serviceCreateFilter } from '../services/gmailService';
 
 export function useGmailApi(accessToken) {
     // This internal helper is no longer needed as the service functions handle auth and error
@@ -33,7 +33,7 @@ export function useGmailApi(accessToken) {
         }
     }, [accessToken, serviceListMessages]); // Depend on accessToken and the service function
 
-    const getMessageDetails = useCallback(async (messageId, metadataHeaders = ['From', 'Date', 'Subject']) => {
+    const getMessageDetails = useCallback(async (messageId, metadataHeaders = ['From', 'Date', 'Subject', 'List-Unsubscribe']) => {
         if (!accessToken) {
             throw new Error("Access token is not available for API call.");
         }
@@ -73,10 +73,24 @@ export function useGmailApi(accessToken) {
         }
     }, [accessToken, serviceBatchModifyMessages]);
 
+    const createFilter = useCallback(async (criteria, action) => {
+        if (!accessToken) {
+            throw new Error("Access token is not available for API call.");
+        }
+        try {
+            return await serviceCreateFilter(accessToken, { criteria, action });
+        } catch (e) {
+            console.error(`Error in useGmailApi.createFilter:`, e);
+            throw e;
+        }
+    }, [accessToken, serviceCreateFilter]);
+
+
     return {
         listMessages,
         getMessageDetails,
         trashMessage, // Expose the new function
         batchTrashMessages,
+        createFilter, // Expose the new function
     };
 }

@@ -42,7 +42,7 @@ function Login() {
         onSuccess: handleGoogleLoginSuccess,
         onError: handleGoogleLoginError,
         flow: 'implicit', // Ensures the token is returned to the client
-        scope: 'email https://www.googleapis.com/auth/gmail.modify', // Updated scope for delete/trash
+        scope: 'email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.settings.basic', // Added scope for filters
     });
 
     return (

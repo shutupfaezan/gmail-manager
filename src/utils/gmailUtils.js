@@ -34,3 +34,36 @@ export function getISOWeek(date) {
     const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
     return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
+
+/**
+ * Extracts the first HTTP/HTTPS URL from a List-Unsubscribe header value.
+ * List-Unsubscribe can contain multiple URIs, often <mailto:...> and <http(s)://...>.
+ * This function prioritizes http(s) links.
+ * @param {string} headerValue - The value of the List-Unsubscribe header.
+ * @returns {string|null} The extracted URL or null if not found.
+ */
+export function extractHttpUnsubscribeLink(headerValue) {
+    if (!headerValue) return null;
+    // Regex to find URLs within angle brackets <...>
+    const matches = headerValue.match(/<([^>]+)>/g);
+    if (!matches) return null;
+
+    for (const match of matches) {
+        const url = match.substring(1, match.length - 1); // Remove < and >
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            return url;
+        }
+    }
+    return null;
+}
+
+/**
+ * Extracts the sender's email from a message's 'From' header.
+ * @param {string} fromHeader - The 'From' header string (e.g., "Sender Name <sender@example.com>").
+ * @returns {string|null} The sender's email address or null if not found.
+ */
+export function extractSenderEmail(fromHeader) {
+    if (!fromHeader) return null;
+    const match = fromHeader.match(/<([^>]+)>/);
+    return match ? match[1] : fromHeader; // Fallback to the whole string if no <...> found
+}
