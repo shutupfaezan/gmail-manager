@@ -1,0 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Urbanist:ital,wght@0,100..900;1,100..900&display=swap');
+
+body {
+    font-family: "Urbanist", sans-serif;
+    font-weight: bolder
+}
+
+h1, h2, h3, h4, h5, h6,
+button,
+.card-body p,
+.accordion-button {
+    font-family: "Urbanist", sans-serif;
+    font-weight: bolder;
+}
