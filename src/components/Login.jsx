@@ -1,23 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
-import GmailSendersList from './GmailSendersList';
 import { jwtDecode } from 'jwt-decode';
 import 'bootstrap/dist/css/bootstrap.min.css'; // Keep this for Bootstrap classes
+import { useNavigate } from 'react-router-dom';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEnvelope, faShieldAlt, faDatabase, faQuestionCircle, faChevronDown, faChevronUp } from '@fortawesome/free-solid-svg-icons'; // Import necessary icons
 
 function Login() {
-    const [accessToken, setAccessToken] = useState(null);
     const [loginError, setLoginError] = useState(null);
     const [openAccordionItem, setOpenAccordionItem] = useState(null); // State to manage open/close FAQ items
+    const navigate = useNavigate();
+
+    // If a token already exists, redirect to the main app page
+    useEffect(() => {
+        if (sessionStorage.getItem('googleAccessToken')) {
+            navigate('/gmail-all-senders');
+        }
+    }, [navigate]);
 
     const handleGoogleLoginSuccess = (tokenResponse) => {
         console.log("Google Login Success (from useGoogleLogin):", tokenResponse);
         if (tokenResponse.access_token) {
-            setAccessToken(tokenResponse.access_token);
+            sessionStorage.setItem('googleAccessToken', tokenResponse.access_token);
             setLoginError(null);
-            console.log("Access Token set:", tokenResponse.access_token);
+            console.log("Access Token stored in sessionStorage.");
 
             if (tokenResponse.id_token) {
                 const decodedIdToken = jwtDecode(tokenResponse.id_token);
@@ -26,14 +33,14 @@ function Login() {
         } else {
             console.error("Access token not found in tokenResponse from useGoogleLogin.", tokenResponse);
             setLoginError("Failed to retrieve access token. Check console for details.");
-            setAccessToken(null);
         }
+        // Navigate to the main application view on success
+        navigate('/gmail-all-senders');
     };
 
     const handleGoogleLoginError = (error) => {
         console.error("Google Login Failed (from useGoogleLogin): ", error);
         setLoginError("Login failed. Please try again.");
-        setAccessToken(null);
     };
 
     const login = useGoogleLogin({
@@ -63,34 +70,30 @@ function Login() {
                     <p className="text-muted mb-4">
                         This will let us use the necessary data to help you remove unnecessary emails and manage your subscriptions effectively.
                     </p>
-                    {!accessToken ? (
-                        <div className="mb-4">
-                            <button
-                                onClick={() => login()}
-                                className="btn btn-outline-secondary d-flex align-items-center justify-content-center mx-auto"
-                                style={{
-                                    padding: '10px 24px',
-                                    fontWeight: '500',
-                                    fontSize: '16px',
-                                    borderColor: '#dadce0',
-                                    color: '#3c4043',
-                                    backgroundColor: '#fff'
-                                }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7f8f8'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                            >
-                                <img
-                                    src="../src/assets/G_icon.png"
-                                    alt="Google logo"
-                                    style={{ width: '20px', height: '20px', marginRight: '12px' }}
-                                />
-                                Sign in with Google
-                            </button>
-                            <p className="text-muted mt-2" style={{ fontSize: '0.85rem' }}>Secure authentication powered by Google</p>
-                        </div>
-                    ) : (
-                        <GmailSendersList accessToken={accessToken} />
-                    )}
+                    <div className="mb-4">
+                        <button
+                            onClick={() => login()}
+                            className="btn btn-outline-secondary d-flex align-items-center justify-content-center mx-auto"
+                            style={{
+                                padding: '10px 24px',
+                                fontWeight: '500',
+                                fontSize: '16px',
+                                borderColor: '#dadce0',
+                                color: '#3c4043',
+                                backgroundColor: '#fff'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7f8f8'}
+                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+                        >
+                            <img
+                                src="../src/assets/G_icon.png"
+                                alt="Google logo"
+                                style={{ width: '20px', height: '20px', marginRight: '12px' }}
+                            />
+                            Sign in with Google
+                        </button>
+                        <p className="text-muted mt-2" style={{ fontSize: '0.85rem' }}>Secure authentication powered by Google</p>
+                    </div>
                     {loginError && <p className="text-danger mt-3">{loginError}</p>}
                 </div>
             </div>

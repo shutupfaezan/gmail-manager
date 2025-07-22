@@ -1,7 +1,8 @@
 import React from 'react'; // Removed useState, useEffect, useCallback, useRef
 import { useGmailAnalysis } from '../hooks/useGmailAnalysis'; // Path to the new hook
 
-function GmailSendersList({ accessToken }) {
+function GmailSendersList() {
+    const accessToken = sessionStorage.getItem('googleAccessToken');
     const {
         stage1SenderData,
         selectedSenderForLifetime,
