@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as gmailService from '../services/gmailService';
 import { normalizeDomain } from '../utils/gmailUtils';
+import { processMessagesBatch } from './processMessagesBatch';
+import { trashAllFromSender } from './trashActions';
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -28,34 +30,6 @@ export const useGmailAnalysis = (accessToken) => {
 
     // --- Core Logic ---
 
-    // Throttle batch size to 10-20 to avoid rate limits
-    const processMessagesBatch = useCallback(async (messageIds) => {
-        const senderCounts = {};
-        if (!accessToken || messageIds.length === 0) return senderCounts;
-
-        // Process in small sub-batches to avoid rate limits
-        const batchSize = 10;
-        for (let i = 0; i < messageIds.length; i += batchSize) {
-            const batch = messageIds.slice(i, i + batchSize);
-            const promises = batch.map(id =>
-                gmailService.getMessage(accessToken, id, { format: 'metadata', metadataHeaders: ['From'] })
-            );
-            const results = await Promise.allSettled(promises);
-            results.forEach(result => {
-                if (result.status === 'fulfilled' && result.value) {
-                    const fromHeader = result.value.payload?.headers?.find(h => h.name.toLowerCase() === 'from')?.value;
-                    const domain = normalizeDomain(fromHeader);
-                    if (domain) {
-                        senderCounts[domain] = (senderCounts[domain] || 0) + 1;
-                    }
-                }
-            });
-            // Throttle between sub-batches
-            await sleep(300);
-        }
-        return senderCounts;
-    }, [accessToken]);
-
     const performStage1Analysis = useCallback(async () => {
         setIsLoading(true);
         setIsBackgroundLoading(false);
@@ -73,7 +47,7 @@ export const useGmailAnalysis = (accessToken) => {
             let initialResponse = await gmailService.listMessages(accessToken, { q: 'newer_than:7d', maxResults: 100 });
             if (initialResponse.messages && initialResponse.messages.length > 0) {
                 const messageIds = initialResponse.messages.map(m => m.id);
-                const newCounts = await processMessagesBatch(messageIds);
+                const newCounts = await processMessagesBatch(accessToken, messageIds);
 
                 // Merge newCounts into accumulator
                 Object.entries(newCounts).forEach(([domain, count]) => {
@@ -114,7 +88,7 @@ export const useGmailAnalysis = (accessToken) => {
                 }
 
                 const messageIds = response.messages.map(m => m.id);
-                const newCounts = await processMessagesBatch(messageIds);
+                const newCounts = await processMessagesBatch(accessToken, messageIds);
 
                 // Merge newCounts into accumulator
                 Object.entries(newCounts).forEach(([domain, count]) => {
@@ -182,37 +156,7 @@ export const useGmailAnalysis = (accessToken) => {
     }, [accessToken]);
 
     const handleTrashAllFromSender = useCallback(async (domain) => {
-        setIsBatchProcessing(true);
-        setActionMessage(`Finding all emails from ${domain}...`);
-        try {
-            // Search for all messages from this domain
-            const query = `from:${domain}`;
-            let nextPageToken = undefined;
-            let allMessageIds = [];
-            do {
-                const response = await gmailService.listMessages(accessToken, { q: query, maxResults: 100, pageToken: nextPageToken });
-                if (response.messages && response.messages.length > 0) {
-                    allMessageIds.push(...response.messages.map(m => m.id));
-                }
-                nextPageToken = response.nextPageToken;
-            } while (nextPageToken);
-
-            setActionMessage(`Trashing ${allMessageIds.length} emails from ${domain}...`);
-            // Trash in small batches to avoid rate limits
-            const batchSize = 10;
-            for (let i = 0; i < allMessageIds.length; i += batchSize) {
-                const batch = allMessageIds.slice(i, i + batchSize);
-                await Promise.allSettled(batch.map(id => gmailService.trashMessage(accessToken, id)));
-                setActionMessage(`Trashed ${Math.min(i + batchSize, allMessageIds.length)} of ${allMessageIds.length} emails...`);
-                await sleep(500);
-            }
-            setActionMessage(`All emails from ${domain} have been trashed.`);
-        } catch (error) {
-            setActionMessage(`Failed to trash all from ${domain}. Error: ${error.message}`);
-            console.error("Failed to trash all from sender:", domain, error);
-        } finally {
-            setIsBatchProcessing(false);
-        }
+        await trashAllFromSender(accessToken, domain, setActionMessage, setIsBatchProcessing);
     }, [accessToken]);
 
     const handleAttemptUnsubscribe = useCallback(async (domain) => {
