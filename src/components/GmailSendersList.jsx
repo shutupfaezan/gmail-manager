@@ -1,30 +1,34 @@
-import React from 'react'; // Removed useState, useEffect, useCallback, useRef
-import { useGmailAnalysis } from '../hooks/useGmailAnalysis'; // Path to the new hook
+import React from 'react';
+import { useGmailAnalysis } from '../hooks/useGmailAnalysis';
 
+// Solution: Always get the access token from sessionStorage inside this component
 function GmailSendersList() {
+    // Always read the token from sessionStorage to ensure it's available after login/redirect
     const accessToken = sessionStorage.getItem('googleAccessToken');
+    console.log("GmailSendersList accessToken:", accessToken);
+
     const {
         stage1SenderData,
         selectedSenderForLifetime,
         lifetimeEmailsDisplay,
         isFetchingLifetime,
-        isLoading, // This is for Stage 1 loading
+        isLoading,
         error,
         progress,
         currentStage,
         deletingEmailIds,
         actionMessage,
-        isBatchProcessing, // New state for batch operations
-        unsubscribeState, // New state for unsubscribe feature
-        filterCreationState, // New state for filter creation
-        performStage1Analysis, // For retry
+        isBatchProcessing,
+        unsubscribeState,
+        filterCreationState,
+        performStage1Analysis,
         handleSenderSelectionForLifetime,
         handleStopLifetimeFetch,
         handleTrashEmail,
-        handleTrashAllFromSender, // New handler
-        handleAttemptUnsubscribe, // New handler for unsubscribe
-        openUnsubscribePage,      // New handler for opening unsubscribe page
-        handleCreateFilterForSender, // New handler for creating filters
+        handleTrashAllFromSender,
+        handleAttemptUnsubscribe,
+        openUnsubscribePage,
+        handleCreateFilterForSender,
     } = useGmailAnalysis(accessToken);
 
     // --- UI Rendering ---
@@ -231,6 +235,9 @@ function GmailSendersList() {
                 <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
             )}
         </div>
+
+
+
     );
 }
 
