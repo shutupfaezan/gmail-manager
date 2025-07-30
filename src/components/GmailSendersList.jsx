@@ -1,9 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGmailAnalysis } from '../hooks/useGmailAnalysis';
 
-// Solution: Always get the access token from sessionStorage inside this component
 function GmailSendersList() {
-    // Always read the token from sessionStorage to ensure it's available after login/redirect
     const accessToken = sessionStorage.getItem('googleAccessToken');
     console.log("GmailSendersList accessToken:", accessToken);
 
@@ -31,33 +29,45 @@ function GmailSendersList() {
         handleCreateFilterForSender,
     } = useGmailAnalysis(accessToken);
 
-    // --- UI Rendering ---
-    // The renderStatusBar, renderActionStatus, and main JSX structure remain largely the same.
-    // They will now use the state and handlers destructured from useGmailAnalysis.
+    const [currentPage, setCurrentPage] = useState(1);
+    const sendersPerPage = 10;
+
+    const stringToColor = (str) => {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+        return `#${'00000'.substring(0, 6 - c.length)}${c}`;
+    };
+
+    const sortedStage1DisplayData = Object.entries(stage1SenderData).sort(([, aData], [, bData]) => {
+        const totalA = Object.values(aData).reduce((sum, count) => sum + count, 0);
+        const totalB = Object.values(bData).reduce((sum, count) => sum + count, 0);
+        return totalB - totalA;
+    });
+
+    const totalPages = Math.ceil(sortedStage1DisplayData.length / sendersPerPage);
+    const paginatedSenders = sortedStage1DisplayData.slice(
+        (currentPage - 1) * sendersPerPage,
+        currentPage * sendersPerPage
+    );
+
+    const confirmAndTrashEmail = (messageId, subject) => {
+        if (window.confirm(`Are you sure you want to move the email "${subject}" to Trash?`)) {
+            handleTrashEmail(messageId, subject);
+        }
+    };
 
     const renderStatusBar = () => {
         if (error) {
-            return (
-                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid red', borderRadius: '5px', backgroundColor: '#ffebee', color: 'red', textAlign: 'center' }}>
-                    <strong>Error:</strong> {error}
-                </div>
-            );
+            return <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid red', borderRadius: '5px', backgroundColor: '#ffebee', color: 'red', textAlign: 'center' }}><strong>Error:</strong> {error}</div>;
         }
-        // Show progress if Stage 1 is loading OR lifetime emails are being fetched OR batch processing OR unsubscribe loading
         if (isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
-            return (
-                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #007bff', borderRadius: '5px', backgroundColor: '#e7f3ff', color: '#004085', textAlign: 'center' }}>
-                    {filterCreationState.isLoading ? filterCreationState.message : progress || "Processing..."}
-                </div>
-            );
+            return <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #007bff', borderRadius: '5px', backgroundColor: '#e7f3ff', color: '#004085', textAlign: 'center' }}>{filterCreationState.isLoading ? filterCreationState.message : progress || "Processing..."}</div>;
         }
-        // Show final progress/status message if no error and not actively loading
-        if (progress && !isLoading && !isFetchingLifetime && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && !error) {
-            return (
-                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '5px', backgroundColor: '#f8f9fa', color: '#333', textAlign: 'center' }}>
-                    Status: {progress}
-                </div>
-            );
+        if (progress) {
+            return <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '5px', backgroundColor: '#f8f9fa', color: '#333', textAlign: 'center' }}>Status: {progress}</div>;
         }
         return null;
     };
@@ -72,32 +82,16 @@ function GmailSendersList() {
         );
     };
 
-    const renderUnsubscribeStatus = () => {
-        if (!unsubscribeState.senderDomain || (!unsubscribeState.isLoading && !unsubscribeState.message && !unsubscribeState.link)) return null;
-        // This message will be shown near the sender card or globally, depending on where you want it.
-        // For now, let's assume it's a global message shown below the action status.
-        return <div style={{ padding: '10px', margin: '10px 0', border: '1px solid #17a2b8', borderRadius: '5px', backgroundColor: '#d1ecf1', color: '#0c5460', textAlign: 'center' }}>{unsubscribeState.isLoading ? `Checking unsubscribe for ${unsubscribeState.senderDomain}...` : unsubscribeState.message}</div>;
-    };
-
     const renderFilterCreationStatus = () => {
         if (!filterCreationState.senderIdentifier || (!filterCreationState.isLoading && !filterCreationState.message)) return null;
         const isError = filterCreationState.message && filterCreationState.message.toLowerCase().startsWith("error");
         return <div style={{ padding: '10px', margin: '10px 0', border: `1px solid ${isError ? 'red' : '#28a745'}`, borderRadius: '5px', backgroundColor: isError ? '#ffebee' : '#e6ffed', color: isError ? 'red' : '#155724', textAlign: 'center' }}>{filterCreationState.isLoading ? `Processing filter for ${filterCreationState.senderIdentifier}...` : filterCreationState.message}</div>;
     };
 
-    // Confirmation for trashing email is good to keep in the component
-    const confirmAndTrashEmail = (messageId, subject) => {
-        // eslint-disable-next-line no-restricted-globals
-        if (confirm(`Are you sure you want to move the email "${subject}" to Trash?`)) {
-            handleTrashEmail(messageId, subject);
-        }
+    const renderUnsubscribeStatus = () => {
+        if (!unsubscribeState.senderDomain || (!unsubscribeState.isLoading && !unsubscribeState.message && !unsubscribeState.link)) return null;
+        return <div style={{ padding: '10px', margin: '10px 0', border: '1px solid #17a2b8', borderRadius: '5px', backgroundColor: '#d1ecf1', color: '#0c5460', textAlign: 'center' }}>{unsubscribeState.isLoading ? `Checking unsubscribe for ${unsubscribeState.senderDomain}...` : unsubscribeState.message}</div>;
     };
-
-    const sortedStage1DisplayData = Object.entries(stage1SenderData).sort(([, aData], [, bData]) => {
-        const totalA = Object.values(aData).reduce((sum, count) => sum + count, 0);
-        const totalB = Object.values(bData).reduce((sum, count) => sum + count, 0);
-        return totalB - totalA; // Sort descending by total emails
-    });
 
     return (
         <div>
@@ -106,104 +100,120 @@ function GmailSendersList() {
             {renderFilterCreationStatus()}
             {renderUnsubscribeStatus()}
 
-            {/* If there was an error, and we're not in Stage 1 loading, show retry button */}
             {error && !isLoading && !isFetchingLifetime && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && (
-                 <button onClick={performStage1Analysis} style={{ marginBottom: '15px', padding: '8px 15px' }}>Retry Full Analysis</button>
+                <button onClick={performStage1Analysis} style={{ marginBottom: '15px', padding: '8px 15px' }}>Retry Full Analysis</button>
             )}
 
-            {Object.keys(stage1SenderData).length > 0 && (
+            {sortedStage1DisplayData.length > 0 && (
                 <section>
-                    <h2>Stage 1: Email Senders - Last 30 Days (by Week)</h2>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'flex-start' }}> {/* Changed to flex-start */}
-                        {sortedStage1DisplayData.map(([domain, weeklyCounts]) => {
+                    <span>Email Senders</span>
+                    <div style={{ border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden' }}>
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: '40px 1fr 100px 300px',
+                            alignItems: 'center',
+                            padding: '10px 16px',
+                            backgroundColor: '#f9f9f9',
+                            fontWeight: 'bold'
+                        }}>
+                            <div></div>
+                            <div>Sender</div>
+                            <div>Emails</div>
+                            <div>Actions</div>
+                        </div>
+                        {paginatedSenders.map(([domain, weeklyCounts]) => {
                             const totalForDomain = Object.values(weeklyCounts).reduce((sum, count) => sum + count, 0);
+                            const senderInitial = domain.charAt(0).toUpperCase();
+                            const avatarBg = stringToColor(senderInitial);
+
                             return (
-                                <div 
-                                    key={`${domain}-stage1`} 
-                                    style={{ 
-                                        border: '1px solid #ccc', 
-                                        borderRadius: '8px',
-                                        padding: '16px', 
-                                        margin: '8px', 
-                                        width: 'calc(20% - 16px)', // Aim for 5 cards per row, accounting for gap
-                                        minWidth: '220px', // Minimum width for smaller screens, adjusted slightly
-                                        boxSizing: 'border-box',
-                                        display: 'flex',
-                                        flexDirection: 'column'
-                                    }}
-                                >
-                                    <h3 style={{ marginTop: 0, marginBottom: '8px', fontSize: '1.1em' }}>{domain}</h3>
-                                    <p style={{ fontSize: '0.9em', color: '#555', marginBottom: '12px' }}>30-Day Total: <strong>{totalForDomain}</strong></p>
-                                    {/* Weekly breakdown removed */}
-                                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <button 
-                                        onClick={() => handleSenderSelectionForLifetime(domain)} 
-                                        disabled={isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading}
-                                        style={{ paddingTop: '8px', paddingBottom: '8px' }}
-                                    >
-                                        Analyze Lifetime Emails
-                                    </button>
-                                    {/* Revert temporary change and add debug info */}
-                                    {unsubscribeState.senderDomain === domain && unsubscribeState.link ? (
-                                        <button onClick={() => openUnsubscribePage(unsubscribeState.link)} style={{ paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#28a745', color: 'white' }}>
-                                            Open Unsubscribe Page
-                                        </button>
-                                    ) : ( // This is the button that should show initially
-                                        <button 
+                                <div key={domain} style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '40px 1fr 100px 300px',
+                                    alignItems: 'center',
+                                    padding: '12px 16px',
+                                    borderTop: '1px solid #eee',
+                                    fontSize: '0.95em'
+                                }}>
+                                    <div>
+                                        <div style={{
+                                            width: '32px',
+                                            height: '32px',
+                                            borderRadius: '50%',
+                                            backgroundColor: avatarBg,
+                                            color: 'white',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontWeight: 'bold'
+                                        }}>{senderInitial}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight: 'bold' }}>{domain}</div>
+                                        <div style={{ fontSize: '0.85em', color: '#777' }}>noreply@{domain}</div>
+                                    </div>
+                                    <div style={{ fontWeight: 'bold' }}>{totalForDomain} <span style={{ fontWeight: 'normal', color: '#666' }}>emails</span></div>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        <button
                                             onClick={() => handleAttemptUnsubscribe(domain)}
-                                            disabled={isLoading || isFetchingLifetime || isBatchProcessing || filterCreationState.isLoading || (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain)}
-                                            style={{ paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#17a2b8', color: 'white' }}
+                                            disabled={isLoading || isFetchingLifetime || unsubscribeState.isLoading}
+                                            style={{ backgroundColor: '#f44336', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer' }}
                                         >
-                                            {/* Show 'Checking...' only for the specific sender being processed */}
-                                            {unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 'Checking...' : 'Unsubscribe'} 
+                                            {unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 'Checking...' : 'Unsubscribe'}
                                         </button>
-                                    )}
-                                    <button
-                                        onClick={() => handleCreateFilterForSender(domain)}
-                                        disabled={isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || (filterCreationState.isLoading && filterCreationState.senderIdentifier === domain)}
-                                        style={{ paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#6f42c1', color: 'white' }}
-                                    >
-                                        {filterCreationState.isLoading && filterCreationState.senderIdentifier === domain ? 'Filtering...' : 'Filter to Trash'}
-                                    </button>
-                                    {/* Debugging output */}
-                                    {/* <p style={{fontSize: '0.7em', color: 'purple'}}>
-                                        Debug: unsubscribeState.senderDomain="{unsubscribeState.senderDomain}", domain="{domain}", link="{unsubscribeState.link ? 'Found' : 'None'}"
-                                    </p> */}
+                                        <button
+                                            onClick={() => handleTrashAllFromSender(domain)}
+                                            disabled={isLoading || isBatchProcessing}
+                                            style={{ backgroundColor: '#ff9800', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                                        >
+                                            Delete
+                                        </button>
+                                        <button
+                                            onClick={() => handleSenderSelectionForLifetime(domain)}
+                                            disabled={isLoading}
+                                            style={{ backgroundColor: '#2196f3', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                                        >
+                                            View
+                                        </button>
+                                    </div>
                                 </div>
-                                </div>
-                            
                             );
                         })}
                     </div>
+
+                    {totalPages > 1 && (
+                        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
+                            {Array.from({ length: totalPages }, (_, i) => (
+                                <button
+                                    key={i + 1}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                    style={{
+                                        padding: '6px 12px',
+                                        backgroundColor: currentPage === i + 1 ? '#007bff' : '#f0f0f0',
+                                        color: currentPage === i + 1 ? '#fff' : '#000',
+                                        border: 'none',
+                                        borderRadius: '4px'
+                                    }}
+                                >
+                                    {i + 1}
+                                </button>
+                            ))}
+                            <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
+                        </div>
+                    )}
                 </section>
             )}
 
             {selectedSenderForLifetime && (
                 <section style={{ marginTop: '30px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                        <h2>Lifetime Emails from: {selectedSenderForLifetime}</h2>
-                        <button
-                            onClick={() => handleTrashAllFromSender(selectedSenderForLifetime)}
-                            disabled={isFetchingLifetime || isLoading || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading || (lifetimeEmailsDisplay.length === 0 && !isFetchingLifetime)}
-                            style={{ 
-                                padding: '8px 15px', 
-                                backgroundColor: '#dc3545', 
-                                color: 'white', 
-                                border: 'none', 
-                                borderRadius: '4px', 
-                                cursor: 'pointer' 
-                            }}
-                        >
-                            {isBatchProcessing ? 'Trashing All...' : `Trash All From ${selectedSenderForLifetime}`}
-                        </button>
-                    </div>
-                    {(isFetchingLifetime || isBatchProcessing || (unsubscribeState.isLoading && unsubscribeState.senderDomain === selectedSenderForLifetime) || (filterCreationState.isLoading && filterCreationState.senderIdentifier === selectedSenderForLifetime)) && (
+                    <h2>Lifetime Emails from: {selectedSenderForLifetime}</h2>
+                    {(isFetchingLifetime || isBatchProcessing) && (
                         <div>
-                            <p>{progress || (isFetchingLifetime ? `Loading lifetime emails... Displayed: ${lifetimeEmailsDisplay.length}` : "Processing batch operation...")}</p>
-                            {isFetchingLifetime && <button onClick={handleStopLifetimeFetch} disabled={isBatchProcessing}>Stop Loading</button>}
+                            <p>{progress || `Loading emails... Displayed: ${lifetimeEmailsDisplay.length}`}</p>
+                            {isFetchingLifetime && <button onClick={handleStopLifetimeFetch}>Stop Loading</button>}
                         </div>
                     )}
-
                     {lifetimeEmailsDisplay.map(email => {
                         const isDeleting = deletingEmailIds.has(email.id);
                         return (
@@ -211,33 +221,25 @@ function GmailSendersList() {
                                 <div>
                                     <p><strong>Subject:</strong> {email.subject}</p>
                                     <p><strong>Date:</strong> {new Date(email.date).toLocaleString()}</p>
-                                    <p style={{ fontSize: '0.8em', color: 'gray' }}>From: {email.from} (ID: {email.id})</p>
+                                    <p style={{ fontSize: '0.8em', color: 'gray' }}>From: {email.from}</p>
                                 </div>
-                                <button 
+                                <button
                                     onClick={() => confirmAndTrashEmail(email.id, email.subject)}
-                                    disabled={isDeleting || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading}
-                                    style={{ padding: '5px 10px', backgroundColor: isDeleting ? 'grey' : '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                    disabled={isDeleting}
+                                    style={{ padding: '5px 10px', backgroundColor: isDeleting ? 'gray' : '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}
                                 >
                                     {isDeleting ? 'Trashing...' : 'Trash'}
                                 </button>
                             </div>
                         );
                     })}
-                    {!isFetchingLifetime && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && lifetimeEmailsDisplay.length > 0 && !progress.includes("Fetching page") && !progress.includes("Stopping") && (
-                        <p style={{marginTop: '10px', fontStyle: 'italic'}}>
-                            {`Displayed: ${lifetimeEmailsDisplay.length} emails. ${progress.includes("No more") || progress.includes("All available") ? progress : ''}`}
-                        </p>
-                    )}
                 </section>
             )}
-            {/* Display message if analysis is complete (or errored early) and no data is shown */}
-             {currentStage === 0 && !isLoading && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && Object.keys(stage1SenderData).length === 0 && lifetimeEmailsDisplay.length === 0 && (
+
+            {currentStage === 0 && !isLoading && !isBatchProcessing && Object.keys(stage1SenderData).length === 0 && lifetimeEmailsDisplay.length === 0 && (
                 <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
             )}
         </div>
-
-
-
     );
 }
 
