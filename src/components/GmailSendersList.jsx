@@ -60,27 +60,37 @@ function GmailSendersList() {
     };
 
     const renderStatusBar = () => {
-        if (error) {
-            return (
-                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid red', borderRadius: '5px', backgroundColor: '#ffebee', color: 'red', textAlign: 'center' }}>
-                    <strong>Error:</strong> {error}
-                </div>
-            );
-        }
         if (isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
             return (
-                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #007bff', borderRadius: '5px', backgroundColor: '#e7f3ff', color: '#004085', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                    <div className="spinner-border" style={{ width: '20px', height: '20px', color: '#007bff' }} role="status">
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '5px 10px',
+                        pointerEvents: 'none', // Disables user interaction
+                        opacity: 0.6, // Gives a "disabled" look
+                    }}
+                >
+                    <div
+                        className="spinner-border"
+                        style={{
+                            width: '16px',
+                            height: '16px',
+                            borderWidth: '2px',
+                            color: '#007bff',
+                        }}
+                        role="status"
+                    >
                         <span className="visually-hidden">Loading...</span>
                     </div>
-                    <span>{filterCreationState.isLoading ? filterCreationState.message : progress || "Processing..."}</span>
-                </div>
-            );
-        }
-        if (progress) {
-            return (
-                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '5px', backgroundColor: '#f8f9fa', color: '#333', textAlign: 'center' }}>
-                    Status: {progress}
+                    <span style={{ fontSize: '0.9em', color: '#333' }}>
+                        {filterCreationState.isLoading
+                            ? filterCreationState.message
+                            : progress
+                            ? `Progress: ${progress}%`
+                            : 'Processing...'}
+                    </span>
                 </div>
             );
         }
