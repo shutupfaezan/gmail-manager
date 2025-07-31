@@ -61,13 +61,28 @@ function GmailSendersList() {
 
     const renderStatusBar = () => {
         if (error) {
-            return <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid red', borderRadius: '5px', backgroundColor: '#ffebee', color: 'red', textAlign: 'center' }}><strong>Error:</strong> {error}</div>;
+            return (
+                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid red', borderRadius: '5px', backgroundColor: '#ffebee', color: 'red', textAlign: 'center' }}>
+                    <strong>Error:</strong> {error}
+                </div>
+            );
         }
         if (isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
-            return <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #007bff', borderRadius: '5px', backgroundColor: '#e7f3ff', color: '#004085', textAlign: 'center' }}>{filterCreationState.isLoading ? filterCreationState.message : progress || "Processing..."}</div>;
+            return (
+                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #007bff', borderRadius: '5px', backgroundColor: '#e7f3ff', color: '#004085', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                    <div className="spinner-border" style={{ width: '20px', height: '20px', color: '#007bff' }} role="status">
+                        <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <span>{filterCreationState.isLoading ? filterCreationState.message : progress || "Processing..."}</span>
+                </div>
+            );
         }
         if (progress) {
-            return <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '5px', backgroundColor: '#f8f9fa', color: '#333', textAlign: 'center' }}>Status: {progress}</div>;
+            return (
+                <div style={{ padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '5px', backgroundColor: '#f8f9fa', color: '#333', textAlign: 'center' }}>
+                    Status: {progress}
+                </div>
+            );
         }
         return null;
     };
@@ -168,7 +183,7 @@ function GmailSendersList() {
                                     <div key={domain} style={{
                                         display: 'grid',
                                         background: '#fff',
-                                        gridTemplateColumns: '40px 1fr 100px 300px',
+                                        gridTemplateColumns: '40px 1fr 100px 350px', // Increased the width of the last column
                                         alignItems: 'center',
                                         padding: '12px 16px',
                                         borderTop: '1px solid #eee',
@@ -192,27 +207,30 @@ function GmailSendersList() {
                                             <div style={{ fontSize: '0.85em', color: '#777' }}>noreply@{domain}</div>
                                         </div>
                                         <div style={{ fontWeight: 'bold' }}>{totalForDomain} <span style={{ fontWeight: 'normal', color: '#666' }}>emails</span></div>
-                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', whiteSpace: 'nowrap', justifyContent: 'center' }}>
                                             <button
+                                                className="d-flex align-items-center justify-content-center"
                                                 onClick={() => handleAttemptUnsubscribe(domain)}
                                                 disabled={isLoading || isFetchingLifetime || unsubscribeState.isLoading}
-                                                style={{ backgroundColor: '#f44336', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                                                style={{ backgroundColor: '#ffcbc8', color: '#fff', border: 'none', padding: '2px 12px', borderRadius: '4px', cursor: 'pointer', gap: "5px", height: "fit-content" }}
                                             >
-                                                {unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 'Checking...' : 'Unsubscribe'}
+                                                <i className="fa-solid fa-user-slash" style={{ fontSize: '14px', color: '#de1717' }}></i><span style={{ color: "#de1717", fontWeight: "500" }}>{unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 'Checking...' : 'Unsubscribe'}</span>
                                             </button>
                                             <button
+                                                className="d-flex align-items-center justify-content-center"
                                                 onClick={() => handleTrashAllFromSender(domain)}
                                                 disabled={isLoading || isBatchProcessing}
-                                                style={{ backgroundColor: '#ff9800', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                                                style={{ backgroundColor: '#fedfb1', color: '#fff', border: 'none', padding: '2px 12px', borderRadius: '4px', cursor: 'pointer', gap: "5px", height: "fit-content" }}
                                             >
-                                                Delete
+                                                <i className="fa-solid fa-trash" style={{ fontSize: '14px', color: '#ff7000' }}></i><span style={{ color: "#ff7000", fontWeight: "500" }}>Delete</span>
                                             </button>
                                             <button
+                                                className="d-flex align-items-center justify-content-center"
                                                 onClick={() => handleSenderSelectionForLifetime(domain)}
                                                 disabled={isLoading}
-                                                style={{ backgroundColor: '#2196f3', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer' }}
+                                                style={{ backgroundColor: '#d4e6f4', color: '#fff', border: 'none', padding: '2px 12px', borderRadius: '4px', cursor: 'pointer', gap: "5px", height: "fit-content" }}
                                             >
-                                                View
+                                                <i className="fa-solid fa-eye" style={{ fontSize: '14px', color: '#007bff' }}></i><span style={{ color: "#007bff", fontWeight: "500" }}>View</span>
                                             </button>
                                         </div>
                                     </div>
@@ -222,7 +240,7 @@ function GmailSendersList() {
                             {totalPages > 1 && (
                                 <div style={{
                                     padding: '12px 16px',
-                                    backgroundColor: '#f8f9fa',
+                                    backgroundColor: 'white',
                                     borderTop: '1px solid #eee',
                                     display: 'flex',
                                     justifyContent: 'center',
