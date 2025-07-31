@@ -104,10 +104,10 @@ function GmailSendersList() {
                 {renderActionStatus()}
                 {renderFilterCreationStatus()}
                 {renderUnsubscribeStatus()}
-
                 {error && !isLoading && !isFetchingLifetime && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && (
                     <button onClick={performStage1Analysis} style={{ marginBottom: '15px', padding: '8px 15px' }}>Retry Full Analysis</button>
                 )}
+
                 <div className='d-flex align-items-center justify-content-center p-4' style={{ gap: '20px', flexWrap: 'wrap' }}>
                     <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "1px solid #80808047"}}>
                         <div className='d-flex flex-column justify-content-center' style={{ flex: 1 }}>
@@ -120,7 +120,7 @@ function GmailSendersList() {
                     </div>
                     <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "1px solid #80808047"}}>
                         <div className='d-flex flex-column justify-content-center' style={{ flex: 1 }}>
-                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Total Senders</span>
+                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Total Emails</span>
                             <span style={{ fontSize: '24px', fontWeight: '500' }}>247</span>
                         </div>
                         <div className='d-flex align-items-center' style={{ marginLeft: '12px' }}>
@@ -129,7 +129,7 @@ function GmailSendersList() {
                     </div>
                     <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "1px solid #80808047"}}>
                         <div className='d-flex flex-column justify-content-center' style={{ flex: 1 }}>
-                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Total Senders</span>
+                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Unsubscribed</span>
                             <span style={{ fontSize: '24px', fontWeight: '500' }}>247</span>
                         </div>
                         <div className='d-flex align-items-center' style={{ marginLeft: '12px' }}>
@@ -138,7 +138,7 @@ function GmailSendersList() {
                     </div>
                     <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "1px solid #80808047"}}>
                         <div className='d-flex flex-column justify-content-center' style={{ flex: 1 }}>
-                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Total Senders</span>
+                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Emails Deleted</span>
                             <span style={{ fontSize: '24px', fontWeight: '500' }}>247</span>
                         </div>
                         <div className='d-flex align-items-center' style={{ marginLeft: '12px' }}>
@@ -146,8 +146,15 @@ function GmailSendersList() {
                         </div>
                     </div>
                 </div>
+                <div className='d-flex align-items-center justify-content-center p-4' >
+                    <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "0.2px solid #80808047", gap: "10px"}}>
+                        <div className='d-flex justify-content-center py-1 px-2 rounded align-items-center' style={{background: "#de1717", gap: "8px"}}><i className="fa-solid fa-user-slash" style={{ fontSize: '12px', color: 'white' }}></i><span style={{fontWeight: '600', fontSize: '14px', color: 'white' }}>Unsubscribe All Selected</span></div>
+                        <div className='d-flex justify-content-center py-1 px-2 rounded align-items-center' style={{background: "#ff7000", gap: "8px"}}><i className="fa-solid fa-trash" style={{ fontSize: '12px', color: 'white' }}></i><span style={{fontWeight: '600', fontSize: '14px', color: 'white' }}>Delete All Selected</span></div>
+                    </div>
+                </div>
+                <div className='d-flex align-items-center justify-content-center p-4'>
                 {sortedStage1DisplayData.length > 0 && (
-                    <section className="p-4">
+                    <section className='col d-flex flex-column bg-white p-3' style={{ borderRadius: '10px', border: "0.2px solid #80808047", gap: "10px"}}>
                         <span className='fw-bold'>Email Senders</span>
                         <div style={{ border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden' }}>
                             <div style={{
@@ -246,7 +253,6 @@ function GmailSendersList() {
                         )}
                     </section>
                 )}
-
                 {selectedSenderForLifetime && (
                     <section style={{ marginTop: '30px' }}>
                         <h2>Lifetime Emails from: {selectedSenderForLifetime}</h2>
@@ -282,6 +288,7 @@ function GmailSendersList() {
                     <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
                 )}
             </div>
+        </div>
         </div>
     );
 }
