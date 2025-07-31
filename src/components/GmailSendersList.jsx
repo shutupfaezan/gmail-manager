@@ -154,21 +154,10 @@ function GmailSendersList() {
                 </div>
                 <div className='d-flex align-items-center justify-content-center p-4'>
                 {sortedStage1DisplayData.length > 0 && (
-                    <section className='col d-flex flex-column bg-white p-3' style={{ borderRadius: '10px', border: "0.2px solid #80808047", gap: "10px"}}>
-                        <span className='fw-bold'>Email Senders</span>
+                    <section className='col d-flex flex-column bg-light'>
                         <div style={{ border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden' }}>
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: '40px 1fr 100px 300px',
-                                alignItems: 'center',
-                                padding: '10px 16px',
-                                backgroundColor: '#f9f9f9',
-                                fontWeight: 'bold'
-                            }}>
-                                <div></div>
-                                <div>Sender</div>
-                                <div>Emails</div>
-                                <div>Actions</div>
+                            <div style={{ alignItems: 'center', padding: '10px 16px', backgroundColor: '#ffffffff', fontWeight: 'bold'}}>
+                                <span className='fw-bold'>Email Senders</span>
                             </div>
                             {paginatedSenders.map(([domain, weeklyCounts]) => {
                                 const totalForDomain = Object.values(weeklyCounts).reduce((sum, count) => sum + count, 0);
@@ -178,6 +167,7 @@ function GmailSendersList() {
                                 return (
                                     <div key={domain} style={{
                                         display: 'grid',
+                                        background: '#fff',
                                         gridTemplateColumns: '40px 1fr 100px 300px',
                                         alignItems: 'center',
                                         padding: '12px 16px',
