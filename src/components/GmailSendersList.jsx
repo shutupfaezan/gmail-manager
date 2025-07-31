@@ -218,29 +218,36 @@ function GmailSendersList() {
                                     </div>
                                 );
                             })}
+                            {/* Footer (Pagination) */}
+                            {totalPages > 1 && (
+                                <div style={{
+                                    padding: '12px 16px',
+                                    backgroundColor: '#f8f9fa',
+                                    borderTop: '1px solid #eee',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    gap: '8px'
+                                }}>
+                                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
+                                    {Array.from({ length: totalPages }, (_, i) => (
+                                        <button
+                                            key={i + 1}
+                                            onClick={() => setCurrentPage(i + 1)}
+                                            style={{
+                                                padding: '6px 12px',
+                                                backgroundColor: currentPage === i + 1 ? '#007bff' : '#f0f0f0',
+                                                color: currentPage === i + 1 ? '#fff' : '#000',
+                                                border: 'none',
+                                                borderRadius: '4px'
+                                            }}
+                                        >
+                                            {i + 1}
+                                        </button>
+                                    ))}
+                                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
+                                </div>
+                            )}
                         </div>
-
-                        {totalPages > 1 && (
-                            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                                <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
-                                {Array.from({ length: totalPages }, (_, i) => (
-                                    <button
-                                        key={i + 1}
-                                        onClick={() => setCurrentPage(i + 1)}
-                                        style={{
-                                            padding: '6px 12px',
-                                            backgroundColor: currentPage === i + 1 ? '#007bff' : '#f0f0f0',
-                                            color: currentPage === i + 1 ? '#fff' : '#000',
-                                            border: 'none',
-                                            borderRadius: '4px'
-                                        }}
-                                    >
-                                        {i + 1}
-                                    </button>
-                                ))}
-                                <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
-                            </div>
-                        )}
                     </section>
                 )}
                 {selectedSenderForLifetime && (
