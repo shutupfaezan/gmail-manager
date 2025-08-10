@@ -135,6 +135,33 @@ function GmailSendersList() {
         );
     };
 
+    const handleUnsubscribeClick = async (domain) => {
+        console.log('handleUnsubscribeClick called for domain:', domain);
+        
+        if (isBatchProcessing || (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain)) {
+            console.log('Already processing this domain, skipping');
+            return;
+        }
+
+        try {
+            console.log('Attempting to unsubscribe from:', domain);
+            await handleAttemptUnsubscribe(domain);
+            
+            // Update selected senders if this domain was selected
+            setSelectedSenders(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(domain);
+                return newSet;
+            });
+
+            // Show success message
+            setActionMessage(`Successfully unsubscribed from ${domain}`);
+        } catch (error) {
+            console.error('Unsubscribe failed:', error);
+            setActionMessage(`Failed to unsubscribe from ${domain}: ${error.message}`);
+        }
+    };
+
     return (
         <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
             {renderDeleteConfirmModal()}
@@ -191,7 +218,32 @@ function GmailSendersList() {
                 </div>
                 <div className='action-buttons-container'>
                     <div className='action-buttons'>
-                        <div className='action-button unsubscribe'><i className="fa-solid fa-user-slash icon"></i><span>Unsubscribe All Selected</span></div>
+                        <div 
+                            className='action-button unsubscribe'
+                            onClick={async (e) => {
+                                e.preventDefault();
+                                if (selectedSenders.size === 0) {
+                                    setActionMessage('Please select senders to unsubscribe from');
+                                    return;
+                                }
+                                
+                                console.log('Processing unsubscribe for selected senders:', selectedSenders);
+                                for (const domain of selectedSenders) {
+                                    await handleUnsubscribeClick(domain);
+                                }
+                            }}
+                            style={{ 
+                                cursor: selectedSenders.size === 0 || isBatchProcessing ? 'not-allowed' : 'pointer',
+                                opacity: selectedSenders.size === 0 || isBatchProcessing ? 0.6 : 1
+                            }}
+                        >
+                            <i className="fa-solid fa-user-slash icon"></i>
+                            <span>
+                                {isBatchProcessing 
+                                    ? 'Processing...' 
+                                    : `Unsubscribe ${selectedSenders.size ? `(${selectedSenders.size})` : ''}`}
+                            </span>
+                        </div>
                         <div className='action-button delete'><i className="fa-solid fa-trash icon"></i><span>Delete All Selected</span></div>
                     </div>
                 </div>
@@ -208,41 +260,69 @@ function GmailSendersList() {
 
                             return (
                                 <div key={domain} className="sender-row">
-                                    <div>
-                                        <div className="sender-avatar" style={{ backgroundColor: avatarBg }}>{senderInitial}</div>
+                                    <div className="checkbox-container">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedSenders.has(domain)}
+                                            onChange={(e) => {
+                                                setSelectedSenders(prev => {
+                                                    const newSet = new Set(prev);
+                                                    if (e.target.checked) {
+                                                        newSet.add(domain);
+                                                    } else {
+                                                        newSet.delete(domain);
+                                                    }
+                                                    return newSet;
+                                                });
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="sender-avatar" style={{ backgroundColor: avatarBg }}>
+                                        {senderInitial}
                                     </div>
                                     <div className="sender-info">
                                         <div className="domain">{domain}</div>
                                         <div className="email">noreply@{domain}</div>
                                     </div>
-                                    <div className="sender-emails-count">{totalForDomain} <span className="label">emails</span></div>
+                                    <div className="sender-emails-count">
+                                        {totalForDomain} <span className="label">emails</span>
+                                    </div>
                                     <div className="sender-actions">
                                         <button
                                             className="sender-action-button unsubscribe"
-                                            onClick={() => {
-                                                console.log('Unsubscribe button clicked for domain:', domain);
-                                                handleAttemptUnsubscribe(domain);
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                console.log('Individual unsubscribe clicked for:', domain);
+                                                handleUnsubscribeClick(domain);
                                             }}
                                             disabled={isLoading || isFetchingLifetime || unsubscribeState.isLoading}
+                                            style={{
+                                                opacity: unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 0.7 : 1
+                                            }}
                                         >
-                                            <i className="fa-solid fa-user-slash icon"></i><span className="text">{unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 'Checking...' : 'Unsubscribe'}</span>
+                                            <i className="fa-solid fa-user-slash icon"></i>
+                                            <span className="text">
+                                                {unsubscribeState.isLoading && unsubscribeState.senderDomain === domain 
+                                                    ? 'Processing...' 
+                                                    : 'Unsubscribe'}
+                                            </span>
                                         </button>
                                         <button
                                             className="sender-action-button delete"
-                                            onClick={() => {
-                                                console.log('Delete button clicked for domain:', domain);
-                                                handleTrashAllFromSender(domain);
-                                            }}
+                                            onClick={() => handleTrashAllFromSender(domain)}
                                             disabled={isLoading || isBatchProcessing}
                                         >
-                                            <i className="fa-solid fa-trash icon"></i><span className="text">Delete</span>
+                                            <i className="fa-solid fa-trash icon"></i>
+                                            <span className="text">Delete</span>
                                         </button>
                                         <button
                                             className="sender-action-button view"
                                             onClick={() => handleSenderSelectionForLifetime(domain)}
                                             disabled={isLoading}
                                         >
-                                            <i className="fa-solid fa-eye icon"></i><span className="text">View</span>
+                                            <i className="fa-solid fa-eye icon"></i>
+                                            <span className="text">View</span>
                                         </button>
                                     </div>
                                 </div>

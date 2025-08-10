@@ -58,3 +58,72 @@ export async function trashMessagesBatch(accessToken, messageIds, setActionMessa
         setIsBatchProcessing(false);
     }
 }
+
+export async function createUnsubscribeFilter(accessToken, domain, setActionMessage) {
+    try {
+        setActionMessage(`Creating filter for emails from ${domain}...`);
+        
+        // Define filter criteria and action
+        const filterCriteria = {
+            criteria: {
+                from: domain
+            },
+            action: {
+                addLabelIds: ['TRASH'],
+                removeLabelIds: ['INBOX']
+            }
+        };
+
+        // Create the filter
+        await gmailService.createFilter(accessToken, filterCriteria);
+        setActionMessage(`Successfully created filter for ${domain}. Future emails will be automatically moved to trash.`);
+        
+        return true;
+    } catch (error) {
+        console.error('Filter creation failed:', error);
+        setActionMessage(`Failed to create filter: ${error.message}`);
+        return false;
+    }
+}
+
+/**
+ * Creates a filter to automatically trash future emails from a domain
+ * and optionally trashes existing emails
+ */
+export async function handleUnsubscribe(accessToken, domain, setActionMessage, setIsBatchProcessing) {
+    setIsBatchProcessing(true);
+    try {
+        setActionMessage(`Processing unsubscribe for ${domain}...`);
+
+        // 1. Create filter for future emails
+        const filterData = {
+            criteria: {
+                from: domain
+            },
+            action: {
+                addLabelIds: ['TRASH'],
+                removeLabelIds: ['INBOX']
+            }
+        };
+
+        await gmailService.createFilter(accessToken, filterData);
+        setActionMessage(`Created filter for ${domain}`);
+
+        // 2. Get existing messages from this sender
+        const messageIds = await getAllMessageIdsFromSender(accessToken, domain);
+        
+        if (messageIds.length > 0) {
+            // 3. Move existing messages to trash
+            await trashMessagesBatch(accessToken, messageIds, setActionMessage, setIsBatchProcessing);
+        }
+
+        setActionMessage(`Successfully unsubscribed from ${domain}. Future emails will be moved to trash automatically.`);
+        return true;
+    } catch (error) {
+        console.error('Unsubscribe operation failed:', error);
+        setActionMessage(`Failed to unsubscribe from ${domain}: ${error.message}`);
+        return false;
+    } finally {
+        setIsBatchProcessing(false);
+    }
+}
