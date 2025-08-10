@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import * as gmailService from '../services/gmailService';
 import { normalizeDomain } from '../utils/gmailUtils';
 import { processMessagesBatch } from './processMessagesBatch';
-import { trashAllFromSender } from './trashActions';
+import { getAllMessageIdsFromSender, trashMessagesBatch } from './trashActions';
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -25,12 +25,14 @@ export const useGmailAnalysis = (accessToken) => {
     const [isBatchProcessing, setIsBatchProcessing] = useState(false);
     const [unsubscribeState, setUnsubscribeState] = useState({ isLoading: false, message: '', link: null, senderDomain: null });
     const [filterCreationState, setFilterCreationState] = useState({ isLoading: false, message: '', senderIdentifier: null });
+    const [deleteConfirmState, setDeleteConfirmState] = useState({ open: false, domain: null, messageIds: [], loading: false });
 
     const stopProcessingRef = useRef(false);
 
     // --- Core Logic ---
 
     const performStage1Analysis = useCallback(async () => {
+        console.log('Starting analysis with token:', accessToken ? 'present' : 'missing');
         setIsLoading(true);
         setIsBackgroundLoading(false);
         setError(null);
@@ -41,70 +43,62 @@ export const useGmailAnalysis = (accessToken) => {
 
         let totalProcessedMessages = 0;
         let currentSenderDataAccumulator = {};
+        let pageToken = null;
+        const maxResults = 100; // Process 100 emails at a time
 
         try {
-            setProgress('Analyzing recent emails (last 7 days)...');
-            let initialResponse = await gmailService.listMessages(accessToken, { q: 'newer_than:7d', maxResults: 100 });
-            if (initialResponse.messages && initialResponse.messages.length > 0) {
-                const messageIds = initialResponse.messages.map(m => m.id);
-                const newCounts = await processMessagesBatch(accessToken, messageIds);
-
-                // Merge newCounts into accumulator
-                Object.entries(newCounts).forEach(([domain, count]) => {
-                    // Store as { total: count } for each domain
-                    currentSenderDataAccumulator[domain] = { total: (currentSenderDataAccumulator[domain]?.total || 0) + count };
+            setProgress('Analyzing recent emails...');
+            
+            do {
+                console.log('Making Gmail API call...');
+                let response = await gmailService.listMessages(accessToken, { 
+                    maxResults: maxResults,
+                    pageToken: pageToken 
                 });
-                setStage1SenderData({ ...currentSenderDataAccumulator });
-                totalProcessedMessages += messageIds.length;
-                setProgress(`Found ${Object.keys(currentSenderDataAccumulator).length} senders in ${totalProcessedMessages} recent emails.`);
-            } else {
-                setProgress('No recent emails found in the last 7 days.');
-            }
+                console.log('Gmail API response:', response);
+                
+                if (response.messages && response.messages.length > 0) {
+                    const messageIds = response.messages.map(m => m.id);
+                    console.log('Processing', messageIds.length, 'messages');
+                    const newCounts = await processMessagesBatch(accessToken, messageIds);
+                    console.log('Processed counts:', newCounts);
+
+                    // Merge newCounts into accumulator
+                    Object.entries(newCounts).forEach(([domain, count]) => {
+                        currentSenderDataAccumulator[domain] = { 
+                            total: (currentSenderDataAccumulator[domain]?.total || 0) + count 
+                        };
+                    });
+                    
+                    // Update state with current progress
+                    setStage1SenderData({ ...currentSenderDataAccumulator });
+                    
+                    totalProcessedMessages += messageIds.length;
+                    setProgress(`Found ${Object.keys(currentSenderDataAccumulator).length} senders in ${totalProcessedMessages} emails...`);
+                    
+                    // Get next page token for continuation
+                    pageToken = response.nextPageToken;
+                    
+                    // Small delay to avoid rate limiting
+                    await sleep(500);
+                } else {
+                    console.log('No more messages found');
+                    break;
+                }
+                
+                // Stop if we've processed enough emails or if user stopped
+                if (stopProcessingRef.current) {
+                    break;
+                }
+                
+            } while (pageToken && !stopProcessingRef.current);
 
             setIsLoading(false);
-            setIsBackgroundLoading(true);
-            setCurrentStage(2);
-            setProgress('Scanning older emails in the background...');
-
-            let nextPageToken = initialResponse.nextPageToken;
-
-            if (!nextPageToken) {
-                setProgress(`Analysis complete. Scanned a total of ${totalProcessedMessages} emails.`);
-                setIsBackgroundLoading(false);
-                setCurrentStage(0);
-                return;
-            }
-
-            do {
-                if (stopProcessingRef.current) {
-                    setProgress('Background scanning stopped.');
-                    break;
-                }
-
-                const response = await gmailService.listMessages(accessToken, { maxResults: 100, pageToken: nextPageToken });
-                if (!response.messages || response.messages.length === 0) {
-                    setProgress('No more emails to scan.');
-                    break;
-                }
-
-                const messageIds = response.messages.map(m => m.id);
-                const newCounts = await processMessagesBatch(accessToken, messageIds);
-
-                // Merge newCounts into accumulator
-                Object.entries(newCounts).forEach(([domain, count]) => {
-                    currentSenderDataAccumulator[domain] = { total: (currentSenderDataAccumulator[domain]?.total || 0) + count };
-                });
-                setStage1SenderData({ ...currentSenderDataAccumulator });
-                totalProcessedMessages += messageIds.length;
-                setProgress(`Scanned ${totalProcessedMessages} total emails...`);
-
-                await sleep(500); // Throttle between page batches
-
-                nextPageToken = response.nextPageToken;
-            } while (nextPageToken && !stopProcessingRef.current);
-
+            setCurrentStage(0);
             setProgress(`Analysis complete. Scanned a total of ${totalProcessedMessages} emails.`);
+            
         } catch (err) {
+            console.error('Analysis error:', err);
             setError(err.message || 'An error occurred during analysis.');
             setProgress('');
         } finally {
@@ -127,25 +121,20 @@ export const useGmailAnalysis = (accessToken) => {
     const handleSenderSelectionForLifetime = useCallback((domain) => {
         setSelectedSenderForLifetime(domain);
         setActionMessage(`Feature not implemented: Analyze Lifetime Emails for ${domain}`);
-        console.log("handleSenderSelectionForLifetime called for", domain);
     }, []);
 
     const handleStopLifetimeFetch = useCallback(() => {
         setActionMessage("Feature not implemented: Stop Lifetime Fetch");
-        console.log("handleStopLifetimeFetch called");
     }, []);
 
     const handleTrashEmail = useCallback(async (messageId, subject) => {
         setDeletingEmailIds(prev => new Set(prev).add(messageId));
         setActionMessage(`Attempting to trash email: "${subject}"...`);
-        console.log("handleTrashEmail called for", messageId, subject);
         try {
             await gmailService.trashMessage(accessToken, messageId);
             setActionMessage(`Successfully trashed email: "${subject}".`);
-            console.log("Successfully trashed email:", messageId);
         } catch (error) {
             setActionMessage(`Failed to trash email: "${subject}". Error: ${error.message}`);
-            console.error("Failed to trash email:", messageId, error);
         } finally {
             setDeletingEmailIds(prev => {
                 const newState = new Set(prev);
@@ -155,20 +144,56 @@ export const useGmailAnalysis = (accessToken) => {
         }
     }, [accessToken]);
 
+    // --- Delete All From Sender with Confirmation ---
     const handleTrashAllFromSender = useCallback(async (domain) => {
-        await trashAllFromSender(accessToken, domain, setActionMessage, setIsBatchProcessing);
+        console.log('handleTrashAllFromSender called for domain:', domain);
+        // Pause background analysis
+        stopProcessingRef.current = true;
+        setIsBatchProcessing(true);
+        setActionMessage(`Finding all emails from ${domain}...`);
+        try {
+            console.log('Fetching message IDs for domain:', domain);
+            const messageIds = await getAllMessageIdsFromSender(accessToken, domain);
+            console.log('Found', messageIds.length, 'message IDs for domain:', domain);
+            setDeleteConfirmState({ open: true, domain, messageIds, loading: false });
+            setIsBatchProcessing(false);
+        } catch (error) {
+            console.error('Failed to fetch emails for', domain, ':', error);
+            setActionMessage(`Failed to fetch emails for ${domain}: ${error.message}`);
+            setIsBatchProcessing(false);
+        }
     }, [accessToken]);
 
+    const confirmDeleteAllFromSender = useCallback(async () => {
+        if (!deleteConfirmState.domain || deleteConfirmState.messageIds.length === 0) return;
+        setDeleteConfirmState(state => ({ ...state, loading: true }));
+        await trashMessagesBatch(accessToken, deleteConfirmState.messageIds, setActionMessage, setIsBatchProcessing);
+        setDeleteConfirmState({ open: false, domain: null, messageIds: [], loading: false });
+        // Resume analysis after deletion
+        stopProcessingRef.current = false;
+        performStage1Analysis();
+    }, [accessToken, deleteConfirmState, performStage1Analysis]);
+
+    const cancelDeleteAllFromSender = useCallback(() => {
+        setDeleteConfirmState({ open: false, domain: null, messageIds: [], loading: false });
+        stopProcessingRef.current = false;
+        setIsBatchProcessing(false);
+        performStage1Analysis();
+    }, [performStage1Analysis]);
+
     const handleAttemptUnsubscribe = useCallback(async (domain) => {
-        setUnsubscribeState({ isLoading: true, message: `Searching for unsubscribe link for ${domain}...`, link: null, senderDomain: domain });
-        console.log("handleAttemptUnsubscribe called for", domain);
+        console.log('handleAttemptUnsubscribe called for domain:', domain);
+        setUnsubscribeState({ isLoading: true, message: `Creating filter to delete emails from ${domain}...`, link: null, senderDomain: domain });
         try {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            setUnsubscribeState({ isLoading: false, message: `Unsubscribe search for ${domain} complete (stub).`, link: 'https://example.com/mock-unsubscribe', senderDomain: domain });
-            console.log("Unsubscribe search complete for", domain);
+            const criteria = { from: domain };
+            const action = { addLabelIds: ['TRASH'], removeLabelIds: ['INBOX'] };
+            console.log('Creating filter with criteria:', criteria, 'action:', action);
+            await gmailService.createFilter(accessToken, { criteria, action });
+            console.log('Filter created successfully for:', domain);
+            setUnsubscribeState({ isLoading: false, message: `Successfully created filter for ${domain}.`, link: null, senderDomain: domain });
         } catch (error) {
-            setUnsubscribeState({ isLoading: false, message: `Error searching for unsubscribe for ${domain}: ${error.message}`, link: null, senderDomain: domain });
-            console.error("Error searching for unsubscribe for", domain, error);
+            console.error('Error creating filter for', domain, ':', error);
+            setUnsubscribeState({ isLoading: false, message: `Error creating filter for ${domain}: ${error.message}`, link: null, senderDomain: domain });
         }
     }, [accessToken]);
 
@@ -176,25 +201,20 @@ export const useGmailAnalysis = (accessToken) => {
         if (link) {
             window.open(link, '_blank', 'noopener,noreferrer');
             setActionMessage('Unsubscribe page opened in a new tab.');
-            console.log("Unsubscribe page opened:", link);
         } else {
             setActionMessage('No unsubscribe link available to open.');
-            console.log("No unsubscribe link available to open.");
         }
     }, []);
 
     const handleCreateFilterForSender = useCallback(async (domain) => {
         setFilterCreationState({ isLoading: true, message: `Creating filter for ${domain}...`, senderIdentifier: domain });
-        console.log("handleCreateFilterForSender called for", domain);
         try {
             await new Promise(resolve => setTimeout(resolve, 1500));
             setFilterCreationState({ isLoading: false, message: `Filter created for ${domain} (stub).`, senderIdentifier: domain });
             setActionMessage(`Filter for ${domain} created successfully (stub).`);
-            console.log("Filter created for", domain);
         } catch (error) {
             setFilterCreationState({ isLoading: false, message: `Failed to create filter for ${domain}: ${error.message}`, senderIdentifier: domain });
             setActionMessage(`Failed to create filter for ${domain}. Error: ${error.message}`);
-            console.error("Failed to create filter for", domain, error);
         }
     }, [accessToken]);
 
@@ -220,6 +240,9 @@ export const useGmailAnalysis = (accessToken) => {
         filterCreationState,
         handleTrashEmail,
         handleTrashAllFromSender,
+        confirmDeleteAllFromSender,
+        cancelDeleteAllFromSender,
+        deleteConfirmState,
         handleAttemptUnsubscribe,
         openUnsubscribePage,
         handleCreateFilterForSender,

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useGmailAnalysis } from '../hooks/useGmailAnalysis';
+import './GmailSendersList.css';
 
 function GmailSendersList() {
     const accessToken = sessionStorage.getItem('googleAccessToken');
-    console.log("GmailSendersList accessToken:", accessToken);
+    console.log('Component accessToken:', accessToken ? 'present' : 'missing');
 
     const {
         stage1SenderData,
@@ -27,9 +28,15 @@ function GmailSendersList() {
         handleAttemptUnsubscribe,
         openUnsubscribePage,
         handleCreateFilterForSender,
+        confirmDeleteAllFromSender,
+        cancelDeleteAllFromSender,
+        deleteConfirmState,
     } = useGmailAnalysis(accessToken);
 
+    console.log('Component received data:', { stage1SenderData, isLoading, error, progress });
+
     const [currentPage, setCurrentPage] = useState(1);
+    const [selectedSenders, setSelectedSenders] = useState(new Set());
     const sendersPerPage = 10;
 
     const stringToColor = (str) => {
@@ -37,15 +44,22 @@ function GmailSendersList() {
         for (let i = 0; i < str.length; i++) {
             hash = str.charCodeAt(i) + ((hash << 5) - hash);
         }
-        const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-        return `#${'00000'.substring(0, 6 - c.length)}${c}`;
+        let color = '#';
+        for (let i = 0; i < 3; i++) {
+            const value = (hash >> (i * 8)) & 0xFF;
+            color += ('00' + value.toString(16)).substr(-2);
+        }
+        return color;
     };
 
-    const sortedStage1DisplayData = Object.entries(stage1SenderData).sort(([, aData], [, bData]) => {
-        const totalA = Object.values(aData).reduce((sum, count) => sum + count, 0);
-        const totalB = Object.values(bData).reduce((sum, count) => sum + count, 0);
+    const sortedStage1DisplayData = Object.entries(stage1SenderData).sort((a, b) => {
+        const totalA = a[1].total || 0;
+        const totalB = b[1].total || 0;
         return totalB - totalA;
     });
+
+    console.log('stage1SenderData contents:', stage1SenderData);
+    console.log('sortedStage1DisplayData:', sortedStage1DisplayData);
 
     const totalPages = Math.ceil(sortedStage1DisplayData.length / sendersPerPage);
     const paginatedSenders = sortedStage1DisplayData.slice(
@@ -62,33 +76,15 @@ function GmailSendersList() {
     const renderStatusBar = () => {
         if (isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
             return (
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '5px 10px',
-                        pointerEvents: 'none', // Disables user interaction
-                        opacity: 0.6, // Gives a "disabled" look
-                    }}
-                >
-                    <div
-                        className="spinner-border"
-                        style={{
-                            width: '16px',
-                            height: '16px',
-                            borderWidth: '2px',
-                            color: '#007bff',
-                        }}
-                        role="status"
-                    >
+                <div className="status-bar">
+                    <div className="spinner-border" role="status">
                         <span className="visually-hidden">Loading...</span>
                     </div>
-                    <span style={{ fontSize: '0.9em', color: '#333' }}>
+                    <span>
                         {filterCreationState.isLoading
                             ? filterCreationState.message
                             : progress
-                            ? `Progress: ${progress}%`
+                            ? progress
                             : 'Processing...'}
                     </span>
                 </div>
@@ -101,7 +97,7 @@ function GmailSendersList() {
         if (!actionMessage) return null;
         const isError = actionMessage.toLowerCase().startsWith("error");
         return (
-            <div style={{ padding: '10px', margin: '10px 0', border: `1px solid ${isError ? 'red' : '#007bff'}`, borderRadius: '5px', backgroundColor: isError ? '#ffebee' : '#e7f3ff', color: isError ? 'red' : '#004085', textAlign: 'center' }}>
+            <div className={`action-status ${isError ? 'error' : 'success'}`}>
                 {actionMessage}
             </div>
         );
@@ -110,21 +106,43 @@ function GmailSendersList() {
     const renderFilterCreationStatus = () => {
         if (!filterCreationState.senderIdentifier || (!filterCreationState.isLoading && !filterCreationState.message)) return null;
         const isError = filterCreationState.message && filterCreationState.message.toLowerCase().startsWith("error");
-        return <div style={{ padding: '10px', margin: '10px 0', border: `1px solid ${isError ? 'red' : '#28a745'}`, borderRadius: '5px', backgroundColor: isError ? '#ffebee' : '#e6ffed', color: isError ? 'red' : '#155724', textAlign: 'center' }}>{filterCreationState.isLoading ? `Processing filter for ${filterCreationState.senderIdentifier}...` : filterCreationState.message}</div>;
+        return <div className={`filter-creation-status ${isError ? 'error' : 'success'}`}>{filterCreationState.isLoading ? `Processing filter for ${filterCreationState.senderIdentifier}...` : filterCreationState.message}</div>;
     };
 
     const renderUnsubscribeStatus = () => {
         if (!unsubscribeState.senderDomain || (!unsubscribeState.isLoading && !unsubscribeState.message && !unsubscribeState.link)) return null;
-        return <div style={{ padding: '10px', margin: '10px 0', border: '1px solid #17a2b8', borderRadius: '5px', backgroundColor: '#d1ecf1', color: '#0c5460', textAlign: 'center' }}>{unsubscribeState.isLoading ? `Checking unsubscribe for ${unsubscribeState.senderDomain}...` : unsubscribeState.message}</div>;
+        return <div className="unsubscribe-status">{unsubscribeState.isLoading ? `Checking unsubscribe for ${unsubscribeState.senderDomain}...` : unsubscribeState.message}</div>;
+    };
+
+    // Confirmation Modal
+    const renderDeleteConfirmModal = () => {
+        if (!deleteConfirmState.open) return null;
+        return (
+            <div className="modal-overlay">
+                <div className="modal-content">
+                    <h4>Confirm Delete</h4>
+                    <p>Are you sure you want to delete <b>{deleteConfirmState.messageIds.length}</b> emails from <b>{deleteConfirmState.domain}</b>?</p>
+                    {deleteConfirmState.loading ? (
+                        <p>Deleting emails...</p>
+                    ) : (
+                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                            <button className="btn btn-danger" onClick={confirmDeleteAllFromSender}>Confirm</button>
+                            <button className="btn btn-secondary" onClick={cancelDeleteAllFromSender}>Cancel</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
     };
 
     return (
-        <div  className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
+        <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
+            {renderDeleteConfirmModal()}
             <div className="d-flex align-items-center py-3 bg-white shadow-sm justify-content-center">
                 <img src="../src/assets/mail_icon.png" alt="Gmail logo" style={{ width: '30px', height: '30px', marginRight: '8px' }} />
                 <span style={{ fontSize: '18px', fontWeight: '600', color: 'black' }}>Gmail Unsubscriber</span>
             </div>
-            <div className="col-11 mx-auto my-4" style={{ backgroundColor: '#f8f9fa', borderRadius: '10px', padding: '20px' }}>
+            <div className="senders-list-container">
                 {renderStatusBar()}
                 {renderActionStatus()}
                 {renderFilterCreationStatus()}
@@ -133,153 +151,124 @@ function GmailSendersList() {
                     <button onClick={performStage1Analysis} style={{ marginBottom: '15px', padding: '8px 15px' }}>Retry Full Analysis</button>
                 )}
 
-                <div className='d-flex align-items-center justify-content-center p-4' style={{ gap: '20px', flexWrap: 'wrap' }}>
-                    <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "1px solid #80808047"}}>
-                        <div className='d-flex flex-column justify-content-center' style={{ flex: 1 }}>
-                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Total Senders</span>
-                            <span style={{ fontSize: '24px', fontWeight: '500' }}>247</span>
+                <div className='stats-container'>
+                    <div className='stat-card'>
+                        <div className='stat-card-info'>
+                            <span className='label'>Total Senders</span>
+                            <span className='value'>247</span>
                         </div>
-                        <div className='d-flex align-items-center' style={{ marginLeft: '12px' }}>
-                            <i className="fa-solid fa-people-group" style={{ fontSize: '20px', color: '#007bff' }}></i>
-                        </div>
-                    </div>
-                    <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "1px solid #80808047"}}>
-                        <div className='d-flex flex-column justify-content-center' style={{ flex: 1 }}>
-                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Total Emails</span>
-                            <span style={{ fontSize: '24px', fontWeight: '500' }}>247</span>
-                        </div>
-                        <div className='d-flex align-items-center' style={{ marginLeft: '12px' }}>
-                            <i className="fa-solid fa-envelope" style={{ fontSize: '20px', color: '#28c267' }}></i>
+                        <div className='stat-card-icon'>
+                            <i className="fa-solid fa-people-group" style={{ color: '#007bff' }}></i>
                         </div>
                     </div>
-                    <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "1px solid #80808047"}}>
-                        <div className='d-flex flex-column justify-content-center' style={{ flex: 1 }}>
-                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Unsubscribed</span>
-                            <span style={{ fontSize: '24px', fontWeight: '500' }}>247</span>
+                    <div className='stat-card'>
+                        <div className='stat-card-info'>
+                            <span className='label'>Total Emails</span>
+                            <span className='value'>247</span>
                         </div>
-                        <div className='d-flex align-items-center' style={{ marginLeft: '12px' }}>
-                            <i className="fa-solid fa-user-slash" style={{ fontSize: '20px', color: '#de1717' }}></i>
-                        </div>
-                    </div>
-                    <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "1px solid #80808047"}}>
-                        <div className='d-flex flex-column justify-content-center' style={{ flex: 1 }}>
-                            <span style={{ fontWeight: '600', fontSize: '14px', marginBottom: '-5px', color: '#00000085' }}>Emails Deleted</span>
-                            <span style={{ fontSize: '24px', fontWeight: '500' }}>247</span>
-                        </div>
-                        <div className='d-flex align-items-center' style={{ marginLeft: '12px' }}>
-                            <i className="fa-solid fa-trash" style={{ fontSize: '20px', color: '#ff7000' }}></i>
+                        <div className='stat-card-icon'>
+                            <i className="fa-solid fa-envelope" style={{ color: '#28c267' }}></i>
                         </div>
                     </div>
-                </div>
-                <div className='d-flex align-items-center justify-content-center p-4' >
-                    <div className='col d-flex bg-white p-3' style={{ borderRadius: '10px', border: "0.2px solid #80808047", gap: "10px"}}>
-                        <div className='d-flex justify-content-center py-1 px-2 rounded align-items-center' style={{background: "#de1717", gap: "8px"}}><i className="fa-solid fa-user-slash" style={{ fontSize: '12px', color: 'white' }}></i><span style={{fontWeight: '600', fontSize: '14px', color: 'white' }}>Unsubscribe All Selected</span></div>
-                        <div className='d-flex justify-content-center py-1 px-2 rounded align-items-center' style={{background: "#ff7000", gap: "8px"}}><i className="fa-solid fa-trash" style={{ fontSize: '12px', color: 'white' }}></i><span style={{fontWeight: '600', fontSize: '14px', color: 'white' }}>Delete All Selected</span></div>
+                    <div className='stat-card'>
+                        <div className='stat-card-info'>
+                            <span className='label'>Unsubscribed</span>
+                            <span className='value'>247</span>
+                        </div>
+                        <div className='stat-card-icon'>
+                            <i className="fa-solid fa-user-slash" style={{ color: '#de1717' }}></i>
+                        </div>
+                    </div>
+                    <div className='stat-card'>
+                        <div className='stat-card-info'>
+                            <span className='label'>Emails Deleted</span>
+                            <span className='value'>247</span>
+                        </div>
+                        <div className='stat-card-icon'>
+                            <i className="fa-solid fa-trash" style={{ color: '#ff7000' }}></i>
+                        </div>
                     </div>
                 </div>
-                <div className='d-flex align-items-center justify-content-center p-4'>
+                <div className='action-buttons-container'>
+                    <div className='action-buttons'>
+                        <div className='action-button unsubscribe'><i className="fa-solid fa-user-slash icon"></i><span>Unsubscribe All Selected</span></div>
+                        <div className='action-button delete'><i className="fa-solid fa-trash icon"></i><span>Delete All Selected</span></div>
+                    </div>
+                </div>
+                <div className='senders-list'>
                 {sortedStage1DisplayData.length > 0 && (
                     <section className='col d-flex flex-column bg-light'>
-                        <div style={{ border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden' }}>
-                            <div style={{ alignItems: 'center', padding: '10px 16px', backgroundColor: '#ffffffff', fontWeight: 'bold'}}>
-                                <span className='fw-bold'>Email Senders</span>
-                            </div>
-                            {paginatedSenders.map(([domain, weeklyCounts]) => {
-                                const totalForDomain = Object.values(weeklyCounts).reduce((sum, count) => sum + count, 0);
-                                const senderInitial = domain.charAt(0).toUpperCase();
-                                const avatarBg = stringToColor(senderInitial);
-
-                                return (
-                                    <div key={domain} style={{
-                                        display: 'grid',
-                                        background: '#fff',
-                                        gridTemplateColumns: '40px 1fr 100px 350px', // Increased the width of the last column
-                                        alignItems: 'center',
-                                        padding: '12px 16px',
-                                        borderTop: '1px solid #eee',
-                                        fontSize: '0.95em'
-                                    }}>
-                                        <div>
-                                            <div style={{
-                                                width: '32px',
-                                                height: '32px',
-                                                borderRadius: '50%',
-                                                backgroundColor: avatarBg,
-                                                color: 'white',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontWeight: 'bold'
-                                            }}>{senderInitial}</div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontWeight: 'bold' }}>{domain}</div>
-                                            <div style={{ fontSize: '0.85em', color: '#777' }}>noreply@{domain}</div>
-                                        </div>
-                                        <div style={{ fontWeight: 'bold' }}>{totalForDomain} <span style={{ fontWeight: 'normal', color: '#666' }}>emails</span></div>
-                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', whiteSpace: 'nowrap', justifyContent: 'center' }}>
-                                            <button
-                                                className="d-flex align-items-center justify-content-center"
-                                                onClick={() => handleAttemptUnsubscribe(domain)}
-                                                disabled={isLoading || isFetchingLifetime || unsubscribeState.isLoading}
-                                                style={{ backgroundColor: '#ffcbc8', color: '#fff', border: 'none', padding: '2px 12px', borderRadius: '4px', cursor: 'pointer', gap: "5px", height: "fit-content" }}
-                                            >
-                                                <i className="fa-solid fa-user-slash" style={{ fontSize: '14px', color: '#de1717' }}></i><span style={{ color: "#de1717", fontWeight: "500" }}>{unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 'Checking...' : 'Unsubscribe'}</span>
-                                            </button>
-                                            <button
-                                                className="d-flex align-items-center justify-content-center"
-                                                onClick={() => handleTrashAllFromSender(domain)}
-                                                disabled={isLoading || isBatchProcessing}
-                                                style={{ backgroundColor: '#fedfb1', color: '#fff', border: 'none', padding: '2px 12px', borderRadius: '4px', cursor: 'pointer', gap: "5px", height: "fit-content" }}
-                                            >
-                                                <i className="fa-solid fa-trash" style={{ fontSize: '14px', color: '#ff7000' }}></i><span style={{ color: "#ff7000", fontWeight: "500" }}>Delete</span>
-                                            </button>
-                                            <button
-                                                className="d-flex align-items-center justify-content-center"
-                                                onClick={() => handleSenderSelectionForLifetime(domain)}
-                                                disabled={isLoading}
-                                                style={{ backgroundColor: '#d4e6f4', color: '#fff', border: 'none', padding: '2px 12px', borderRadius: '4px', cursor: 'pointer', gap: "5px", height: "fit-content" }}
-                                            >
-                                                <i className="fa-solid fa-eye" style={{ fontSize: '14px', color: '#007bff' }}></i><span style={{ color: "#007bff", fontWeight: "500" }}>View</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            {/* Footer (Pagination) */}
-                            {totalPages > 1 && (
-                                <div style={{
-                                    padding: '12px 16px',
-                                    backgroundColor: 'white',
-                                    borderTop: '1px solid #eee',
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    gap: '8px'
-                                }}>
-                                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
-                                    {Array.from({ length: totalPages }, (_, i) => (
-                                        <button
-                                            key={i + 1}
-                                            onClick={() => setCurrentPage(i + 1)}
-                                            style={{
-                                                padding: '6px 12px',
-                                                backgroundColor: currentPage === i + 1 ? '#007bff' : '#f0f0f0',
-                                                color: currentPage === i + 1 ? '#fff' : '#000',
-                                                border: 'none',
-                                                borderRadius: '4px'
-                                            }}
-                                        >
-                                            {i + 1}
-                                        </button>
-                                    ))}
-                                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
-                                </div>
-                            )}
+                        <div className="senders-list-header">
+                            <span className='fw-bold'>Email Senders</span>
                         </div>
+                        {paginatedSenders.map(([domain, weeklyCounts]) => {
+                            const totalForDomain = Object.values(weeklyCounts).reduce((sum, count) => sum + count, 0);
+                            const senderInitial = domain.charAt(0).toUpperCase();
+                            const avatarBg = stringToColor(senderInitial);
+
+                            return (
+                                <div key={domain} className="sender-row">
+                                    <div>
+                                        <div className="sender-avatar" style={{ backgroundColor: avatarBg }}>{senderInitial}</div>
+                                    </div>
+                                    <div className="sender-info">
+                                        <div className="domain">{domain}</div>
+                                        <div className="email">noreply@{domain}</div>
+                                    </div>
+                                    <div className="sender-emails-count">{totalForDomain} <span className="label">emails</span></div>
+                                    <div className="sender-actions">
+                                        <button
+                                            className="sender-action-button unsubscribe"
+                                            onClick={() => {
+                                                console.log('Unsubscribe button clicked for domain:', domain);
+                                                handleAttemptUnsubscribe(domain);
+                                            }}
+                                            disabled={isLoading || isFetchingLifetime || unsubscribeState.isLoading}
+                                        >
+                                            <i className="fa-solid fa-user-slash icon"></i><span className="text">{unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 'Checking...' : 'Unsubscribe'}</span>
+                                        </button>
+                                        <button
+                                            className="sender-action-button delete"
+                                            onClick={() => {
+                                                console.log('Delete button clicked for domain:', domain);
+                                                handleTrashAllFromSender(domain);
+                                            }}
+                                            disabled={isLoading || isBatchProcessing}
+                                        >
+                                            <i className="fa-solid fa-trash icon"></i><span className="text">Delete</span>
+                                        </button>
+                                        <button
+                                            className="sender-action-button view"
+                                            onClick={() => handleSenderSelectionForLifetime(domain)}
+                                            disabled={isLoading}
+                                        >
+                                            <i className="fa-solid fa-eye icon"></i><span className="text">View</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {totalPages > 1 && (
+                            <div className="pagination">
+                                <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
+                                {Array.from({ length: totalPages }, (_, i) => (
+                                    <button
+                                        key={i + 1}
+                                        onClick={() => setCurrentPage(i + 1)}
+                                        className={currentPage === i + 1 ? 'active' : ''}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                                <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
+                            </div>
+                        )}
                     </section>
                 )}
-                {selectedSenderForLifetime && (
-                    <section style={{ marginTop: '30px' }}>
+                </div>
+                {/* Remove the lifetime-emails-section and only show progress in the status/progress bar */}
+                {/* {selectedSenderForLifetime && (
+                    <section className="lifetime-emails-section">
                         <h2>Lifetime Emails from: {selectedSenderForLifetime}</h2>
                         {(isFetchingLifetime || isBatchProcessing) && (
                             <div>
@@ -290,7 +279,7 @@ function GmailSendersList() {
                         {lifetimeEmailsDisplay.map(email => {
                             const isDeleting = deletingEmailIds.has(email.id);
                             return (
-                                <div key={email.id} style={{ border: '1px solid #007bff', margin: '5px', padding: '10px', fontSize: '0.9em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div key={email.id} className="lifetime-email-row">
                                     <div>
                                         <p><strong>Subject:</strong> {email.subject}</p>
                                         <p><strong>Date:</strong> {new Date(email.date).toLocaleString()}</p>
@@ -299,7 +288,7 @@ function GmailSendersList() {
                                     <button
                                         onClick={() => confirmAndTrashEmail(email.id, email.subject)}
                                         disabled={isDeleting}
-                                        style={{ padding: '5px 10px', backgroundColor: isDeleting ? 'gray' : '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}
+                                        className={`trash ${isDeleting ? 'disabled' : ''}`}
                                     >
                                         {isDeleting ? 'Trashing...' : 'Trash'}
                                     </button>
@@ -307,15 +296,15 @@ function GmailSendersList() {
                             );
                         })}
                     </section>
-                )}
+                )} */}
 
                 {currentStage === 0 && !isLoading && !isBatchProcessing && Object.keys(stage1SenderData).length === 0 && lifetimeEmailsDisplay.length === 0 && (
                     <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
                 )}
             </div>
         </div>
-        </div>
     );
 }
 
 export default GmailSendersList;
+
