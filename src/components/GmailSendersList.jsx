@@ -17,6 +17,7 @@ function GmailSendersList() {
         currentStage,
         deletingEmailIds,
         actionMessage,
+        setActionMessage,  // Add this line
         isBatchProcessing,
         unsubscribeState,
         filterCreationState,
@@ -163,7 +164,7 @@ function GmailSendersList() {
         }
     };
 
-    // Add these functions before the return statement
+    // Replace the existing handleBulkUnsubscribe function with this simpler version
     const handleBulkUnsubscribe = async (e) => {
         e.preventDefault();
         if (selectedSenders.size === 0) {
@@ -171,40 +172,28 @@ function GmailSendersList() {
             return;
         }
 
-        // Reset success count at start
-        setSuccessCount(0);
         const sendersArray = Array.from(selectedSenders);
-        let failedSenders = [];
+        let processed = 0;
 
         try {
-            setActionMessage(`Starting bulk unsubscribe for ${sendersArray.length} senders...`);
-            console.log('Processing bulk unsubscribe for:', sendersArray);
+            setActionMessage(`Processing ${sendersArray.length} senders...`);
 
             for (const domain of sendersArray) {
                 try {
                     await handleAttemptUnsubscribe(domain);
-                    setSuccessCount(prev => prev + 1); // Update success count
-                    setActionMessage(`Processed ${domain}`);
+                    processed++;
+                    setActionMessage(`Processed ${processed} of ${sendersArray.length}: ${domain}`);
                 } catch (error) {
-                    console.error(`Failed to unsubscribe from ${domain}:`, error);
-                    failedSenders.push(domain);
+                    console.error(`Failed to process ${domain}:`, error);
+                    continue; // Continue with next sender even if one fails
                 }
             }
 
-            // Final status message
-            if (failedSenders.length === 0) {
-                setActionMessage(`Successfully unsubscribed from all senders`);
-            } else {
-                setActionMessage(`Completed: ${successCount} successful, ${failedSenders.length} failed`);
-            }
-
-            // Clear selections and reset count
-            setSelectedSenders(new Set());
-            setSuccessCount(0);
-
+            setActionMessage(`Completed processing ${processed} senders`);
+            setSelectedSenders(new Set()); // Clear selections after completion
         } catch (error) {
-            console.error('Bulk unsubscribe failed:', error);
-            setActionMessage(`Bulk unsubscribe failed: ${error.message}`);
+            console.error('Bulk operation failed:', error);
+            setActionMessage(`Bulk operation failed: ${error.message}`);
         }
     };
 

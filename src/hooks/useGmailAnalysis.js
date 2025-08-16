@@ -234,6 +234,7 @@ export const useGmailAnalysis = (accessToken) => {
         handleSenderSelectionForLifetime,
         handleStopLifetimeFetch,
         actionMessage,
+        setActionMessage,
         deletingEmailIds,
         isBatchProcessing,
         unsubscribeState,
