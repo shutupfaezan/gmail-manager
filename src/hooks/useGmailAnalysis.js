@@ -30,6 +30,9 @@ export const useGmailAnalysis = (accessToken) => {
 
     const stopProcessingRef = useRef(false);
 
+    // Add new state for tracking deletion state
+    const [isDeleteInProgress, setIsDeleteInProgress] = useState(false);
+
     // --- Core Logic ---
 
     const performStage1Analysis = useCallback(async () => {
@@ -147,23 +150,44 @@ export const useGmailAnalysis = (accessToken) => {
 
     // --- Delete All From Sender with Confirmation ---
     const handleTrashAllFromSender = useCallback(async (domain) => {
-        console.log('handleTrashAllFromSender called for domain:', domain);
-        // Pause background analysis
-        stopProcessingRef.current = true;
-        setIsBatchProcessing(true);
-        setActionMessage(`Finding all emails from ${domain}...`);
         try {
-            console.log('Fetching message IDs for domain:', domain);
+            setIsBatchProcessing(true);
             const messageIds = await getAllMessageIdsFromSender(accessToken, domain);
-            console.log('Found', messageIds.length, 'message IDs for domain:', domain);
-            setDeleteConfirmState({ open: true, domain, messageIds, loading: false });
-            setIsBatchProcessing(false);
+            
+            if (messageIds.length === 0) {
+                setActionMessage(`No emails found from ${domain}`);
+                return 0;
+            }
+
+            setActionMessage(`Found ${messageIds.length} emails from ${domain}`);
+            
+            // Process in batches of 50
+            const batchSize = 50;
+            let deletedCount = 0;
+
+            for (let i = 0; i < messageIds.length; i += batchSize) {
+                const batch = messageIds.slice(i, i + batchSize);
+                setActionMessage(`Processing batch ${i/batchSize + 1}...`);
+                
+                try {
+                    await trashMessagesBatch(accessToken, batch);
+                    deletedCount += batch.length;
+                    setActionMessage(`Deleted ${deletedCount} of ${messageIds.length} emails`);
+                    await sleep(1000); // Rate limiting
+                } catch (error) {
+                    console.error('Error processing batch:', error);
+                    // Continue with next batch even if one fails
+                }
+            }
+
+            return deletedCount;
         } catch (error) {
-            console.error('Failed to fetch emails for', domain, ':', error);
-            setActionMessage(`Failed to fetch emails for ${domain}: ${error.message}`);
-            setIsBatchProcessing(false);
+        console.error('Failed to trash messages:', error);
+        throw error;
+        } finally {
+        setIsBatchProcessing(false);
         }
-    }, [accessToken]);
+    }, [accessToken, setActionMessage]);
 
     const confirmDeleteAllFromSender = useCallback(async () => {
         if (!deleteConfirmState.domain || deleteConfirmState.messageIds.length === 0) return;
@@ -309,5 +333,6 @@ export const useGmailAnalysis = (accessToken) => {
         openUnsubscribePage,
         handleCreateFilterForSender,
         existingFilters,
+        isDeleteInProgress,
     };
 };

@@ -33,6 +33,7 @@ function GmailSendersList() {
         cancelDeleteAllFromSender,
         deleteConfirmState,
         existingFilters, // Add existingFilters to destructured values
+        isDeleteInProgress,
     } = useGmailAnalysis(accessToken);
 
     console.log('Component received data:', { stage1SenderData, isLoading, error, progress });
@@ -40,6 +41,13 @@ function GmailSendersList() {
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedSenders, setSelectedSenders] = useState(new Set());
     const [successCount, setSuccessCount] = useState(0); // Add this line
+    const [isDeletingEmails, setIsDeletingEmails] = useState(false);
+    const [deleteProgress, setDeleteProgress] = useState({
+        total: 0,
+        deleted: 0,
+        currentBatch: [],
+        domain: null
+    });
     const sendersPerPage = 10;
 
     const stringToColor = (str) => {
@@ -89,6 +97,12 @@ function GmailSendersList() {
                             : progress
                             ? progress
                             : 'Processing...'}
+                    </span>
+                    <span className="text-muted" style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+                        {isLoading && 'Loading data...'}
+                        {isFetchingLifetime && 'Fetching lifetime emails...'}
+                        {unsubscribeState.isLoading && 'Processing unsubscribe...'}
+                        {filterCreationState.isLoading && 'Creating filter...'}
                     </span>
                 </div>
             );
@@ -225,6 +239,58 @@ function GmailSendersList() {
         }
     };
 
+    // Replace the existing handleIndividualDelete function with this updated version
+    const handleIndividualDelete = async (domain) => {
+        if (isBatchProcessing || isDeletingEmails) {
+            console.log('Already processing, skipping delete');
+            return;
+        }
+
+        try {
+            // Set deletion states
+            setIsDeletingEmails(true);
+            setActionMessage(`Starting deletion process for ${domain}...`);
+            
+            // Initialize progress
+            setDeleteProgress({
+                total: 0,
+                deleted: 0,
+                currentBatch: [],
+                domain: domain
+            });
+
+            // Call handleTrashAllFromSender
+            try {
+                console.log('Starting deletion for domain:', domain);
+                await handleTrashAllFromSender(domain);
+                
+                // Clear selected sender if it was selected
+                setSelectedSenders(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(domain);
+                    return newSet;
+                });
+
+                setActionMessage(`Successfully deleted emails from ${domain}`);
+            } catch (error) {
+                throw new Error(`Failed to delete emails: ${error.message}`);
+            }
+
+        } catch (error) {
+            console.error('Delete operation failed:', error);
+            setActionMessage(`Failed to delete emails from ${domain}: ${error.message}`);
+        } finally {
+            // Reset states
+            setIsDeletingEmails(false);
+            setDeleteProgress({
+                total: 0,
+                deleted: 0,
+                currentBatch: [],
+                domain: null
+            });
+        }
+    };
+
     return (
         <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
             {renderDeleteConfirmModal()}
@@ -302,7 +368,7 @@ function GmailSendersList() {
                     </div>
                 </div>
                 <div className='senders-list'>
-                {sortedStage1DisplayData.length > 0 && (
+                {sortedStage1DisplayData.length > 0 && !isDeletingEmails && !isDeleteInProgress && (
                     <section className='col d-flex flex-column bg-light'>
                         <div className="senders-list-header">
                             <span className='fw-bold'>Email Senders</span>
@@ -368,11 +434,24 @@ function GmailSendersList() {
                                         </button>
                                         <button
                                             className="sender-action-button delete"
-                                            onClick={() => handleTrashAllFromSender(domain)}
-                                            disabled={isLoading || isBatchProcessing}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleIndividualDelete(domain);
+                                            }}
+                                            disabled={isDeletingEmails || isBatchProcessing}
+                                            style={{
+                                                opacity: (isDeletingEmails || isBatchProcessing) ? 0.5 : 1,
+                                                backgroundColor: '#ff4444',
+                                                color: 'white'
+                                            }}
                                         >
                                             <i className="fa-solid fa-trash icon"></i>
-                                            <span className="text">Delete</span>
+                                            <span className="text">
+                                                {isDeletingEmails && deleteProgress.domain === domain 
+                                                    ? `Deleting ${deleteProgress.deleted}/${deleteProgress.total}` 
+                                                    : 'Delete'}
+                                            </span>
                                         </button>
                                         <button
                                             className="sender-action-button view"
@@ -440,6 +519,15 @@ function GmailSendersList() {
                     <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
                 )}
             </div>
+            {(isDeletingEmails || isDeleteInProgress) && (
+                <div className="deletion-progress-overlay">
+                    <div className="deletion-status">
+                        <i className="fa-solid fa-spinner fa-spin"></i>
+                        <p>Deleting emails from {deleteProgress.domain}</p>
+                        <p>{deleteProgress.deleted} / {deleteProgress.total} emails processed</p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
