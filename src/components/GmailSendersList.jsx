@@ -32,6 +32,7 @@ function GmailSendersList() {
         confirmDeleteAllFromSender,
         cancelDeleteAllFromSender,
         deleteConfirmState,
+        existingFilters, // Add existingFilters to destructured values
     } = useGmailAnalysis(accessToken);
 
     console.log('Component received data:', { stage1SenderData, isLoading, error, progress });
@@ -343,37 +344,26 @@ function GmailSendersList() {
                                     <div className="sender-actions">
                                         <button
                                             className="sender-action-button unsubscribe"
-                                            onClick={async (e) => {
+                                            onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                console.log('Individual unsubscribe clicked for:', domain);
-                                                
-                                                // Only block if this specific sender is being processed
-                                                if (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain) {
-                                                    console.log('Already processing this sender');
-                                                    return;
-                                                }
-
-                                                try {
-                                                    await handleAttemptUnsubscribe(domain);
-                                                } catch (error) {
-                                                    console.error('Unsubscribe failed:', error);
-                                                    setActionMessage(`Failed to unsubscribe from ${domain}: ${error.message}`);
-                                                }
+                                                handleAttemptUnsubscribe(domain);
                                             }}
-                                            // Simplified disabled condition - only disable for the specific sender being processed
-                                            disabled={unsubscribeState.isLoading && unsubscribeState.senderDomain === domain}
+                                            disabled={existingFilters.has(domain) || 
+                                                (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain)}
                                             style={{
-                                                backgroundColor: '#dc3545',
-                                                color: 'white',
-                                                opacity: (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain) ? 0.7 : 1
+                                                opacity: existingFilters.has(domain) ? 0.5 : 1,
+                                                backgroundColor: existingFilters.has(domain) ? '#aaa' : '#dc3545',
+                                                color: 'white'
                                             }}
                                         >
                                             <i className="fa-solid fa-user-slash icon"></i>
                                             <span className="text">
-                                                {unsubscribeState.isLoading && unsubscribeState.senderDomain === domain 
-                                                    ? 'Processing...' 
-                                                    : 'Unsubscribe'}
+                                                {existingFilters.has(domain) 
+                                                    ? 'Already Filtered' 
+                                                    : unsubscribeState.isLoading && unsubscribeState.senderDomain === domain 
+                                                        ? 'Processing...' 
+                                                        : 'Unsubscribe'}
                                             </span>
                                         </button>
                                         <button

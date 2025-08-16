@@ -26,6 +26,7 @@ export const useGmailAnalysis = (accessToken) => {
     const [unsubscribeState, setUnsubscribeState] = useState({ isLoading: false, message: '', link: null, senderDomain: null });
     const [filterCreationState, setFilterCreationState] = useState({ isLoading: false, message: '', senderIdentifier: null });
     const [deleteConfirmState, setDeleteConfirmState] = useState({ open: false, domain: null, messageIds: [], loading: false });
+    const [existingFilters, setExistingFilters] = useState(new Set());
 
     const stopProcessingRef = useRef(false);
 
@@ -181,21 +182,81 @@ export const useGmailAnalysis = (accessToken) => {
         performStage1Analysis();
     }, [performStage1Analysis]);
 
+    // Add a function to fetch and process existing filters
+    const fetchExistingFilters = useCallback(async () => {
+        try {
+            const filters = await gmailService.listFilters(accessToken);
+            const filteredDomains = new Set();
+            
+            // Extract domains from filter criteria
+            filters.forEach(filter => {
+                if (filter.criteria && filter.criteria.from) {
+                    const domain = normalizeDomain(filter.criteria.from);
+                    filteredDomains.add(domain);
+                }
+            });
+            
+            setExistingFilters(filteredDomains);
+            console.log('Existing filtered domains:', filteredDomains);
+        } catch (error) {
+            console.error('Failed to fetch filters:', error);
+        }
+    }, [accessToken]);
+
+    // Add useEffect to fetch filters on mount
+    useEffect(() => {
+        if (accessToken) {
+            fetchExistingFilters();
+        }
+    }, [accessToken, fetchExistingFilters]);
+
     const handleAttemptUnsubscribe = useCallback(async (domain) => {
         console.log('handleAttemptUnsubscribe called for domain:', domain);
-        setUnsubscribeState({ isLoading: true, message: `Creating filter to delete emails from ${domain}...`, link: null, senderDomain: domain });
+        
+        // Check if already filtered
+        if (existingFilters.has(domain)) {
+            setUnsubscribeState({ 
+                isLoading: false, 
+                message: `Filter already exists for ${domain}`, 
+                link: null, 
+                senderDomain: domain 
+            });
+            return;
+        }
+
+        setUnsubscribeState({ 
+            isLoading: true, 
+            message: `Creating filter to delete emails from ${domain}...`, 
+            link: null, 
+            senderDomain: domain 
+        });
+
         try {
             const criteria = { from: domain };
             const action = { addLabelIds: ['TRASH'], removeLabelIds: ['INBOX'] };
             console.log('Creating filter with criteria:', criteria, 'action:', action);
             await gmailService.createFilter(accessToken, { criteria, action });
+            
+            // Add to existing filters
+            setExistingFilters(prev => new Set([...prev, domain]));
+            
             console.log('Filter created successfully for:', domain);
-            setUnsubscribeState({ isLoading: false, message: `Successfully created filter for ${domain}.`, link: null, senderDomain: domain });
+            setUnsubscribeState({ 
+                isLoading: false, 
+                message: `Successfully created filter for ${domain}.`, 
+                link: null, 
+                senderDomain: domain 
+            });
         } catch (error) {
             console.error('Error creating filter for', domain, ':', error);
-            setUnsubscribeState({ isLoading: false, message: `Error creating filter for ${domain}: ${error.message}`, link: null, senderDomain: domain });
+            setUnsubscribeState({ 
+                isLoading: false, 
+                message: `Error creating filter for ${domain}: ${error.message}`, 
+                link: null, 
+                senderDomain: domain 
+            });
         }
-    }, [accessToken]);
+    }, [accessToken, existingFilters]);
 
     const openUnsubscribePage = useCallback((link) => {
         if (link) {
@@ -247,5 +308,6 @@ export const useGmailAnalysis = (accessToken) => {
         handleAttemptUnsubscribe,
         openUnsubscribePage,
         handleCreateFilterForSender,
+        existingFilters,
     };
 };
