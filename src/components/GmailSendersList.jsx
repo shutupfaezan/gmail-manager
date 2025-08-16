@@ -37,6 +37,7 @@ function GmailSendersList() {
 
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedSenders, setSelectedSenders] = useState(new Set());
+    const [successCount, setSuccessCount] = useState(0); // Add this line
     const sendersPerPage = 10;
 
     const stringToColor = (str) => {
@@ -162,6 +163,78 @@ function GmailSendersList() {
         }
     };
 
+    // Add these functions before the return statement
+    const handleBulkUnsubscribe = async (e) => {
+        e.preventDefault();
+        if (selectedSenders.size === 0) {
+            setActionMessage('Please select senders to unsubscribe from');
+            return;
+        }
+
+        // Reset success count at start
+        setSuccessCount(0);
+        const sendersArray = Array.from(selectedSenders);
+        let failedSenders = [];
+
+        try {
+            setActionMessage(`Starting bulk unsubscribe for ${sendersArray.length} senders...`);
+            console.log('Processing bulk unsubscribe for:', sendersArray);
+
+            for (const domain of sendersArray) {
+                try {
+                    await handleAttemptUnsubscribe(domain);
+                    setSuccessCount(prev => prev + 1); // Update success count
+                    setActionMessage(`Processed ${domain}`);
+                } catch (error) {
+                    console.error(`Failed to unsubscribe from ${domain}:`, error);
+                    failedSenders.push(domain);
+                }
+            }
+
+            // Final status message
+            if (failedSenders.length === 0) {
+                setActionMessage(`Successfully unsubscribed from all senders`);
+            } else {
+                setActionMessage(`Completed: ${successCount} successful, ${failedSenders.length} failed`);
+            }
+
+            // Clear selections and reset count
+            setSelectedSenders(new Set());
+            setSuccessCount(0);
+
+        } catch (error) {
+            console.error('Bulk unsubscribe failed:', error);
+            setActionMessage(`Bulk unsubscribe failed: ${error.message}`);
+        }
+    };
+
+    const handleIndividualUnsubscribe = async (domain, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain) {
+            console.log('Already processing this domain');
+            return;
+        }
+
+        try {
+            console.log('Processing individual unsubscribe for:', domain);
+            await handleAttemptUnsubscribe(domain);
+            
+            // Remove from selected if it was selected
+            setSelectedSenders(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(domain);
+                return newSet;
+            });
+            
+            setActionMessage(`Successfully unsubscribed from ${domain}`);
+        } catch (error) {
+            console.error('Individual unsubscribe failed:', error);
+            setActionMessage(`Failed to unsubscribe from ${domain}: ${error.message}`);
+        }
+    };
+
     return (
         <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
             {renderDeleteConfirmModal()}
@@ -220,28 +293,19 @@ function GmailSendersList() {
                     <div className='action-buttons'>
                         <div 
                             className='action-button unsubscribe'
-                            onClick={async (e) => {
-                                e.preventDefault();
-                                if (selectedSenders.size === 0) {
-                                    setActionMessage('Please select senders to unsubscribe from');
-                                    return;
-                                }
-                                
-                                console.log('Processing unsubscribe for selected senders:', selectedSenders);
-                                for (const domain of selectedSenders) {
-                                    await handleUnsubscribeClick(domain);
-                                }
-                            }}
+                            onClick={handleBulkUnsubscribe}
                             style={{ 
-                                cursor: selectedSenders.size === 0 || isBatchProcessing ? 'not-allowed' : 'pointer',
-                                opacity: selectedSenders.size === 0 || isBatchProcessing ? 0.6 : 1
+                                cursor: selectedSenders.size === 0 ? 'not-allowed' : 'pointer',
+                                opacity: selectedSenders.size === 0 ? 0.6 : 1,
+                                backgroundColor: '#dc3545',
+                                color: 'white'
                             }}
                         >
                             <i className="fa-solid fa-user-slash icon"></i>
                             <span>
-                                {isBatchProcessing 
-                                    ? 'Processing...' 
-                                    : `Unsubscribe ${selectedSenders.size ? `(${selectedSenders.size})` : ''}`}
+                                {unsubscribeState.isLoading 
+                                    ? `Processing... (${unsubscribeState.senderDomain})` 
+                                    : `Bulk Unsubscribe ${selectedSenders.size ? `(${selectedSenders.size})` : ''}`}
                             </span>
                         </div>
                         <div className='action-button delete'><i className="fa-solid fa-trash icon"></i><span>Delete All Selected</span></div>
@@ -290,15 +354,30 @@ function GmailSendersList() {
                                     <div className="sender-actions">
                                         <button
                                             className="sender-action-button unsubscribe"
-                                            onClick={(e) => {
+                                            onClick={async (e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
                                                 console.log('Individual unsubscribe clicked for:', domain);
-                                                handleUnsubscribeClick(domain);
+                                                
+                                                // Only block if this specific sender is being processed
+                                                if (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain) {
+                                                    console.log('Already processing this sender');
+                                                    return;
+                                                }
+
+                                                try {
+                                                    await handleAttemptUnsubscribe(domain);
+                                                } catch (error) {
+                                                    console.error('Unsubscribe failed:', error);
+                                                    setActionMessage(`Failed to unsubscribe from ${domain}: ${error.message}`);
+                                                }
                                             }}
-                                            disabled={isLoading || isFetchingLifetime || unsubscribeState.isLoading}
+                                            // Simplified disabled condition - only disable for the specific sender being processed
+                                            disabled={unsubscribeState.isLoading && unsubscribeState.senderDomain === domain}
                                             style={{
-                                                opacity: unsubscribeState.isLoading && unsubscribeState.senderDomain === domain ? 0.7 : 1
+                                                backgroundColor: '#dc3545',
+                                                color: 'white',
+                                                opacity: (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain) ? 0.7 : 1
                                             }}
                                         >
                                             <i className="fa-solid fa-user-slash icon"></i>
