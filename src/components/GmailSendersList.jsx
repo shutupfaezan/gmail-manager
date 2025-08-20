@@ -1,91 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useGmailAnalysis } from '../hooks/useGmailAnalysis';
 import './GmailSendersList.css';
 
+const stringToColor = (str) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    let color = '#';
+    for (let i = 0; i < 3; i++) {
+        const value = (hash >> (i * 8)) & 0xFF;
+        color += ('00' + value.toString(16)).substr(-2);
+    }
+    return color;
+};
+
 function GmailSendersList() {
     const accessToken = sessionStorage.getItem('googleAccessToken');
-    console.log('Component accessToken:', accessToken ? 'present' : 'missing');
 
     const {
         stage1SenderData,
-        selectedSenderForLifetime,
+        currentStage,
         lifetimeEmailsDisplay,
-        isFetchingLifetime,
+        handleSenderSelectionForLifetime,
         isLoading,
         error,
         progress,
-        currentStage,
-        deletingEmailIds,
         actionMessage,
-        setActionMessage,  // Add this line
+        setActionMessage,
         isBatchProcessing,
         unsubscribeState,
         filterCreationState,
         performStage1Analysis,
-        handleSenderSelectionForLifetime,
-        handleStopLifetimeFetch,
-        handleTrashEmail,
         handleTrashAllFromSender,
         handleAttemptUnsubscribe,
-        openUnsubscribePage,
-        handleCreateFilterForSender,
         confirmDeleteAllFromSender,
         cancelDeleteAllFromSender,
         deleteConfirmState,
-        existingFilters, // Add existingFilters to destructured values
+        existingFilters,
         isDeleteInProgress,
     } = useGmailAnalysis(accessToken);
 
-    console.log('Component received data:', { stage1SenderData, isLoading, error, progress });
-
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedSenders, setSelectedSenders] = useState(new Set());
-    const [successCount, setSuccessCount] = useState(0); // Add this line
-    const [isDeletingEmails, setIsDeletingEmails] = useState(false);
-    const [deleteProgress, setDeleteProgress] = useState({
-        total: 0,
-        deleted: 0,
-        currentBatch: [],
-        domain: null
-    });
     const sendersPerPage = 10;
 
-    const stringToColor = (str) => {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = str.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        let color = '#';
-        for (let i = 0; i < 3; i++) {
-            const value = (hash >> (i * 8)) & 0xFF;
-            color += ('00' + value.toString(16)).substr(-2);
-        }
-        return color;
-    };
-
-    const sortedStage1DisplayData = Object.entries(stage1SenderData).sort((a, b) => {
-        const totalA = a[1].total || 0;
-        const totalB = b[1].total || 0;
-        return totalB - totalA;
-    });
-
-    console.log('stage1SenderData contents:', stage1SenderData);
-    console.log('sortedStage1DisplayData:', sortedStage1DisplayData);
+    const sortedStage1DisplayData = useMemo(() => {
+        return Object.entries(stage1SenderData).sort((a, b) => {
+            const totalA = a[1].total || 0;
+            const totalB = b[1].total || 0;
+            return totalB - totalA;
+        });
+    }, [stage1SenderData]);
 
     const totalPages = Math.ceil(sortedStage1DisplayData.length / sendersPerPage);
-    const paginatedSenders = sortedStage1DisplayData.slice(
-        (currentPage - 1) * sendersPerPage,
-        currentPage * sendersPerPage
-    );
 
-    const confirmAndTrashEmail = (messageId, subject) => {
-        if (window.confirm(`Are you sure you want to move the email "${subject}" to Trash?`)) {
-            handleTrashEmail(messageId, subject);
-        }
-    };
+    const paginatedSenders = useMemo(() => {
+        return sortedStage1DisplayData.slice(
+            (currentPage - 1) * sendersPerPage,
+            currentPage * sendersPerPage
+        );
+    }, [sortedStage1DisplayData, currentPage, sendersPerPage]);
 
     const renderStatusBar = () => {
-        if (isLoading || isFetchingLifetime || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
+        if (isLoading || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
             return (
                 <div className="status-bar">
                     <div className="spinner-border" role="status">
@@ -100,7 +78,6 @@ function GmailSendersList() {
                     </span>
                     <span className="text-muted" style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
                         {isLoading && 'Loading data...'}
-                        {isFetchingLifetime && 'Fetching lifetime emails...'}
                         {unsubscribeState.isLoading && 'Processing unsubscribe...'}
                         {filterCreationState.isLoading && 'Creating filter...'}
                     </span>
@@ -134,17 +111,24 @@ function GmailSendersList() {
     // Confirmation Modal
     const renderDeleteConfirmModal = () => {
         if (!deleteConfirmState.open) return null;
+
+        const { countLoading, deleteLoading, domain, messageIds } = deleteConfirmState;
+
         return (
             <div className="modal-overlay">
                 <div className="modal-content">
                     <h4>Confirm Delete</h4>
-                    <p>Are you sure you want to delete <b>{deleteConfirmState.messageIds.length}</b> emails from <b>{deleteConfirmState.domain}</b>?</p>
-                    {deleteConfirmState.loading ? (
-                        <p>Deleting emails...</p>
+                    {countLoading ? (
+                        <p>Counting emails from <b>{domain}</b>...</p>
+                    ) : deleteLoading ? (
+                        <p>Deleting <b>{messageIds.length}</b> emails from <b>{domain}</b>...</p>
                     ) : (
-                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                            <button className="btn btn-danger" onClick={confirmDeleteAllFromSender}>Confirm</button>
-                            <button className="btn btn-secondary" onClick={cancelDeleteAllFromSender}>Cancel</button>
+                        <div>
+                            <p>Are you sure you want to delete <b>{messageIds.length}</b> emails from <b>{domain}</b>?</p>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                <button className="btn btn-danger" onClick={confirmDeleteAllFromSender}>Yes, Delete</button>
+                                <button className="btn btn-secondary" onClick={cancelDeleteAllFromSender}>No, Cancel</button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -152,35 +136,7 @@ function GmailSendersList() {
         );
     };
 
-    const handleUnsubscribeClick = async (domain) => {
-        console.log('handleUnsubscribeClick called for domain:', domain);
-        
-        if (isBatchProcessing || (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain)) {
-            console.log('Already processing this domain, skipping');
-            return;
-        }
-
-        try {
-            console.log('Attempting to unsubscribe from:', domain);
-            await handleAttemptUnsubscribe(domain);
-            
-            // Update selected senders if this domain was selected
-            setSelectedSenders(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(domain);
-                return newSet;
-            });
-
-            // Show success message
-            setActionMessage(`Successfully unsubscribed from ${domain}`);
-        } catch (error) {
-            console.error('Unsubscribe failed:', error);
-            setActionMessage(`Failed to unsubscribe from ${domain}: ${error.message}`);
-        }
-    };
-
-    // Replace the existing handleBulkUnsubscribe function with this simpler version
-    const handleBulkUnsubscribe = async (e) => {
+    const handleBulkUnsubscribe = useCallback(async (e) => {
         e.preventDefault();
         if (selectedSenders.size === 0) {
             setActionMessage('Please select senders to unsubscribe from');
@@ -210,86 +166,14 @@ function GmailSendersList() {
             console.error('Bulk operation failed:', error);
             setActionMessage(`Bulk operation failed: ${error.message}`);
         }
-    };
+    }, [selectedSenders, setActionMessage, handleAttemptUnsubscribe]);
 
-    const handleIndividualUnsubscribe = async (domain, e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain) {
-            console.log('Already processing this domain');
+    const handleIndividualDelete = useCallback((domain) => {
+        if (isBatchProcessing || isDeleteInProgress) {
             return;
         }
-
-        try {
-            console.log('Processing individual unsubscribe for:', domain);
-            await handleAttemptUnsubscribe(domain);
-            
-            // Remove from selected if it was selected
-            setSelectedSenders(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(domain);
-                return newSet;
-            });
-            
-            setActionMessage(`Successfully unsubscribed from ${domain}`);
-        } catch (error) {
-            console.error('Individual unsubscribe failed:', error);
-            setActionMessage(`Failed to unsubscribe from ${domain}: ${error.message}`);
-        }
-    };
-
-    // Replace the existing handleIndividualDelete function with this updated version
-    const handleIndividualDelete = async (domain) => {
-        if (isBatchProcessing || isDeletingEmails) {
-            console.log('Already processing, skipping delete');
-            return;
-        }
-
-        try {
-            // Set deletion states
-            setIsDeletingEmails(true);
-            setActionMessage(`Starting deletion process for ${domain}...`);
-            
-            // Initialize progress
-            setDeleteProgress({
-                total: 0,
-                deleted: 0,
-                currentBatch: [],
-                domain: domain
-            });
-
-            // Call handleTrashAllFromSender
-            try {
-                console.log('Starting deletion for domain:', domain);
-                await handleTrashAllFromSender(domain);
-                
-                // Clear selected sender if it was selected
-                setSelectedSenders(prev => {
-                    const newSet = new Set(prev);
-                    newSet.delete(domain);
-                    return newSet;
-                });
-
-                setActionMessage(`Successfully deleted emails from ${domain}`);
-            } catch (error) {
-                throw new Error(`Failed to delete emails: ${error.message}`);
-            }
-
-        } catch (error) {
-            console.error('Delete operation failed:', error);
-            setActionMessage(`Failed to delete emails from ${domain}: ${error.message}`);
-        } finally {
-            // Reset states
-            setIsDeletingEmails(false);
-            setDeleteProgress({
-                total: 0,
-                deleted: 0,
-                currentBatch: [],
-                domain: null
-            });
-        }
-    };
+        handleTrashAllFromSender(domain);
+    }, [isBatchProcessing, isDeleteInProgress, handleTrashAllFromSender]);
 
     return (
         <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
@@ -303,7 +187,7 @@ function GmailSendersList() {
                 {renderActionStatus()}
                 {renderFilterCreationStatus()}
                 {renderUnsubscribeStatus()}
-                {error && !isLoading && !isFetchingLifetime && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && (
+                {error && !isLoading && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && (
                     <button onClick={performStage1Analysis} style={{ marginBottom: '15px', padding: '8px 15px' }}>Retry Full Analysis</button>
                 )}
 
@@ -368,7 +252,7 @@ function GmailSendersList() {
                     </div>
                 </div>
                 <div className='senders-list'>
-                {sortedStage1DisplayData.length > 0 && !isDeletingEmails && !isDeleteInProgress && (
+                {sortedStage1DisplayData.length > 0 && !isDeleteInProgress && (
                     <section className='col d-flex flex-column bg-light'>
                         <div className="senders-list-header">
                             <span className='fw-bold'>Email Senders</span>
@@ -439,17 +323,17 @@ function GmailSendersList() {
                                                 e.stopPropagation();
                                                 handleIndividualDelete(domain);
                                             }}
-                                            disabled={isDeletingEmails || isBatchProcessing}
+                                            disabled={isDeleteInProgress || isBatchProcessing}
                                             style={{
-                                                opacity: (isDeletingEmails || isBatchProcessing) ? 0.5 : 1,
+                                                opacity: (isDeleteInProgress || isBatchProcessing) ? 0.5 : 1,
                                                 backgroundColor: '#ff4444',
                                                 color: 'white'
                                             }}
                                         >
                                             <i className="fa-solid fa-trash icon"></i>
                                             <span className="text">
-                                                {isDeletingEmails && deleteProgress.domain === domain 
-                                                    ? `Deleting ${deleteProgress.deleted}/${deleteProgress.total}` 
+                                                {isDeleteInProgress && deleteConfirmState.domain === domain 
+                                                    ? `Deleting...` 
                                                     : 'Delete'}
                                             </span>
                                         </button>
@@ -483,48 +367,17 @@ function GmailSendersList() {
                     </section>
                 )}
                 </div>
-                {/* Remove the lifetime-emails-section and only show progress in the status/progress bar */}
-                {/* {selectedSenderForLifetime && (
-                    <section className="lifetime-emails-section">
-                        <h2>Lifetime Emails from: {selectedSenderForLifetime}</h2>
-                        {(isFetchingLifetime || isBatchProcessing) && (
-                            <div>
-                                <p>{progress || `Loading emails... Displayed: ${lifetimeEmailsDisplay.length}`}</p>
-                                {isFetchingLifetime && <button onClick={handleStopLifetimeFetch}>Stop Loading</button>}
-                            </div>
-                        )}
-                        {lifetimeEmailsDisplay.map(email => {
-                            const isDeleting = deletingEmailIds.has(email.id);
-                            return (
-                                <div key={email.id} className="lifetime-email-row">
-                                    <div>
-                                        <p><strong>Subject:</strong> {email.subject}</p>
-                                        <p><strong>Date:</strong> {new Date(email.date).toLocaleString()}</p>
-                                        <p style={{ fontSize: '0.8em', color: 'gray' }}>From: {email.from}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => confirmAndTrashEmail(email.id, email.subject)}
-                                        disabled={isDeleting}
-                                        className={`trash ${isDeleting ? 'disabled' : ''}`}
-                                    >
-                                        {isDeleting ? 'Trashing...' : 'Trash'}
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </section>
-                )} */}
-
+                
                 {currentStage === 0 && !isLoading && !isBatchProcessing && Object.keys(stage1SenderData).length === 0 && lifetimeEmailsDisplay.length === 0 && (
                     <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
                 )}
             </div>
-            {(isDeletingEmails || isDeleteInProgress) && (
+            {(isDeleteInProgress) && (
                 <div className="deletion-progress-overlay">
                     <div className="deletion-status">
                         <i className="fa-solid fa-spinner fa-spin"></i>
-                        <p>Deleting emails from {deleteProgress.domain}</p>
-                        <p>{deleteProgress.deleted} / {deleteProgress.total} emails processed</p>
+                        <p>Deleting emails from {deleteConfirmState.domain}</p>
+                        <p>{/* You can add progress here if available */}</p>
                     </div>
                 </div>
             )}
@@ -533,4 +386,3 @@ function GmailSendersList() {
 }
 
 export default GmailSendersList;
-

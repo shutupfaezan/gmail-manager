@@ -20,15 +20,12 @@ function Login() {
     }, [navigate]);
 
     const handleGoogleLoginSuccess = (tokenResponse) => {
-        console.log("Google Login Success (from useGoogleLogin):", tokenResponse);
         if (tokenResponse.access_token) {
             sessionStorage.setItem('googleAccessToken', tokenResponse.access_token);
             setLoginError(null);
-            console.log("Access Token stored in sessionStorage.");
 
             if (tokenResponse.id_token) {
                 const decodedIdToken = jwtDecode(tokenResponse.id_token);
-                console.log("Decoded ID Token (for user info):", decodedIdToken);
             }
         } else {
             console.error("Access token not found in tokenResponse from useGoogleLogin.", tokenResponse);
