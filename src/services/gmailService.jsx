@@ -106,6 +106,16 @@ export async function batchModifyMessages(accessToken, messageIds, { addLabelIds
 }
 
 /**
+ * Lists the user's filters.
+ * @param {string} accessToken - The Google API access token.
+ * @returns {Promise<object>} A promise that resolves to the API response (list of filters).
+ */
+export async function listFilters(accessToken) {
+    const url = `${GMAIL_API_BASE_URL}/settings/filters`;
+    return authenticatedFetch(accessToken, url, { method: 'GET' });
+}
+
+/**
  * Creates a new filter.
  * @param {string} accessToken - The Google API access token.
  * @param {object} filter - The filter object to create.

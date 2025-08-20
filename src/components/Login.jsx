@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+
+
+import { useState, useEffect } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import 'bootstrap/dist/css/bootstrap.min.css'; // Keep this for Bootstrap classes
@@ -6,6 +8,9 @@ import { useNavigate } from 'react-router-dom';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEnvelope, faShieldAlt, faDatabase, faQuestionCircle, faChevronDown, faChevronUp } from '@fortawesome/free-solid-svg-icons'; // Import necessary icons
+
+import mailIcon from '../assets/mail_icon.png';
+import GIcon from '../assets/G_icon.png';
 
 function Login() {
     const [loginError, setLoginError] = useState(null);
@@ -55,14 +60,14 @@ function Login() {
     <div className="d-flex flex-column bg-light" style={{ minHeight: '100vh' }}>
         {/* Header */}
         <div className="d-flex align-items-center py-3 bg-white shadow-sm justify-content-center">
-            <img src="../src/assets/mail_icon.png" alt="Gmail logo" style={{ width: '30px', height: '30px', marginRight: '8px' }} />
+            <img src={mailIcon} alt="Gmail logo" style={{ width: '30px', height: '30px', marginRight: '8px' }} />
             <span style={{ fontSize: '18px', fontWeight: '600', color: 'black' }}>Gmail Unsubscriber</span>
         </div>
         {/* Main Content Card */}
         <div className="flex-fill d-flex align-items-center justify-content-center">                
             <div className="p-4 " style={{ maxWidth: '600px', width: '100%', borderColor: '#e0e0e0' }}>
                 <div className="card-body text-center">
-                    <img src="../src/assets/G_icon.png" alt="Google G" style={{ width: '48px', height: '48px', marginBottom: '16px' }} />
+                    <img src={GIcon} alt="Google G" style={{ width: '48px', height: '48px', marginBottom: '16px' }} />
                     <h2 className="mb-3" style={{fontWeight: 700}}>Connect Your Gmail to Begin</h2>
                     <p className="text-muted mb-4">
                         This will let us use the necessary data to help you remove unnecessary emails and manage your subscriptions effectively.
@@ -82,8 +87,8 @@ function Login() {
                             onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7f8f8'}
                             onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}
                         >
-                            <img
-                                src="../src/assets/G_icon.png"
+                                                        <img
+                                src={GIcon}
                                 alt="Google logo"
                                 style={{ width: '20px', height: '20px', marginRight: '12px' }}
                             />

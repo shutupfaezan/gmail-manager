@@ -1,5 +1,5 @@
 import './App.css'
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import GmailSendersList from './components/GmailSendersList';
 
@@ -24,21 +24,23 @@ const RootRedirect = () => {
 
 function App() {
   return (
-    <Routes>
-      {/* The root path now intelligently redirects based on authentication status. */}
-      <Route path="/" element={<RootRedirect />} />
-      <Route path="/login" element={<Login />} />
-      <Route
-        path="/gmail-all-senders"
-        element={
-          <ProtectedRoute>
-            <GmailSendersList />
-          </ProtectedRoute>
-        }
-      />
-      {/* A catch-all route to redirect any other path to the root for re-evaluation. */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <BrowserRouter basename="/gmail-manager">
+      <Routes>
+        {/* The root path now intelligently redirects based on authentication status. */}
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/gmail-all-senders"
+          element={
+            <ProtectedRoute>
+              <GmailSendersList />
+            </ProtectedRoute>
+          }
+        />
+        {/* A catch-all route to redirect any other path to the root for re-evaluation. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
