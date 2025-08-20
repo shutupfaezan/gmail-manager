@@ -15,6 +15,35 @@ const stringToColor = (str) => {
     return color;
 };
 
+const getPaginationItems = (currentPage, totalPages) => {
+    const delta = 2;
+    const left = currentPage - delta;
+    const right = currentPage + delta + 1;
+    const range = [];
+    const rangeWithDots = [];
+    let l;
+
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= left && i < right)) {
+            range.push(i);
+        }
+    }
+
+    for (let i of range) {
+        if (l) {
+            if (i - l === 2) {
+                rangeWithDots.push(l + 1);
+            } else if (i - l !== 1) {
+                rangeWithDots.push('...');
+            }
+        }
+        rangeWithDots.push(i);
+        l = i;
+    }
+
+    return rangeWithDots;
+};
+
 function GmailSendersList() {
     const accessToken = sessionStorage.getItem('googleAccessToken');
 
@@ -39,10 +68,16 @@ function GmailSendersList() {
         deleteConfirmState,
         existingFilters,
         isDeleteInProgress,
+        // for bulk delete
+        bulkDeleteState,
+        initiateBulkDelete,
+        confirmBulkDelete,
+        cancelBulkDelete,
+        selectedSenders,
+        setSelectedSenders,
     } = useGmailAnalysis(accessToken);
 
     const [currentPage, setCurrentPage] = useState(1);
-    const [selectedSenders, setSelectedSenders] = useState(new Set());
     const sendersPerPage = 10;
 
     const sortedStage1DisplayData = useMemo(() => {
@@ -108,7 +143,7 @@ function GmailSendersList() {
         return <div className="unsubscribe-status">{unsubscribeState.isLoading ? `Checking unsubscribe for ${unsubscribeState.senderDomain}...` : unsubscribeState.message}</div>;
     };
 
-    // Confirmation Modal
+    // Deletion Modal
     const renderDeleteConfirmModal = () => {
         if (!deleteConfirmState.open) return null;
 
@@ -116,18 +151,56 @@ function GmailSendersList() {
 
         return (
             <div className="modal-overlay">
-                <div className="modal-content">
-                    <h4>Confirm Delete</h4>
+                <div className="modal-content delete-modal-content">
+                    <h4>Delete Emails</h4>
                     {countLoading ? (
-                        <p>Counting emails from <b>{domain}</b>...</p>
+                        <div>
+                            <p>Loading emails from <b>{domain}</b>...</p>
+                            <div className="dotted-spinner"></div>
+                        </div>
                     ) : deleteLoading ? (
-                        <p>Deleting <b>{messageIds.length}</b> emails from <b>{domain}</b>...</p>
+                        <div>
+                            <p>Deleting <b>{messageIds.length}</b> emails from <b>{domain}</b>...</p>
+                            <div className="dotted-spinner"></div>
+                        </div>
                     ) : (
                         <div>
-                            <p>Are you sure you want to delete <b>{messageIds.length}</b> emails from <b>{domain}</b>?</p>
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                <button className="btn btn-danger" onClick={confirmDeleteAllFromSender}>Yes, Delete</button>
-                                <button className="btn btn-secondary" onClick={cancelDeleteAllFromSender}>No, Cancel</button>
+                            <p>Found <b>{messageIds.length}</b> emails from <b>{domain}</b>.</p>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', alignItems: 'center', justifyContent: 'center' }}>
+                                <button className="btn btn-danger" onClick={confirmDeleteAllFromSender}>
+                                    Yes
+                                </button>
+                                <span className="cancel-link" onClick={cancelDeleteAllFromSender}>No</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const renderBulkDeleteConfirmModal = () => {
+        if (!bulkDeleteState.open) return null;
+
+        const { loading, totalCount, senders } = bulkDeleteState;
+
+        return (
+            <div className="modal-overlay">
+                <div className="modal-content delete-modal-content">
+                    <h4>Bulk Delete</h4>
+                    {loading ? (
+                        <div>
+                            <p>Counting emails from <b>{senders.length}</b> senders...</p>
+                            <div className="dotted-spinner"></div>
+                        </div>
+                    ) : (
+                        <div>
+                            <p>Found a total of <b>{totalCount}</b> emails from <b>{senders.length}</b> selected senders.</p>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', alignItems: 'center', justifyContent: 'center' }}>
+                                <button className="btn btn-danger" onClick={confirmBulkDelete}>
+                                    Delete {totalCount} Emails
+                                </button>
+                                <button className="btn btn-secondary" onClick={cancelBulkDelete}>Cancel</button>
                             </div>
                         </div>
                     )}
@@ -175,9 +248,18 @@ function GmailSendersList() {
         handleTrashAllFromSender(domain);
     }, [isBatchProcessing, isDeleteInProgress, handleTrashAllFromSender]);
 
+    const handleBulkDelete = () => {
+        if (selectedSenders.size === 0) {
+            setActionMessage('Please select senders to delete.');
+            return;
+        }
+        initiateBulkDelete(selectedSenders);
+    };
+
     return (
         <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
             {renderDeleteConfirmModal()}
+            {renderBulkDeleteConfirmModal()}
             <div className="d-flex align-items-center py-3 bg-white shadow-sm justify-content-center">
                 <img src="../src/assets/mail_icon.png" alt="Gmail logo" style={{ width: '30px', height: '30px', marginRight: '8px' }} />
                 <span style={{ fontSize: '18px', fontWeight: '600', color: 'black' }}>Gmail Unsubscriber</span>
@@ -248,7 +330,7 @@ function GmailSendersList() {
                                     : `Bulk Unsubscribe ${selectedSenders.size ? `(${selectedSenders.size})` : ''}`}
                             </span>
                         </div>
-                        <div className='action-button delete'><i className="fa-solid fa-trash icon"></i><span>Delete All Selected</span></div>
+                        <div className='action-button delete' onClick={handleBulkDelete}><i className="fa-solid fa-trash icon"></i><span>Delete All Selected</span></div>
                     </div>
                 </div>
                 <div className='senders-list'>
@@ -269,15 +351,13 @@ function GmailSendersList() {
                                             type="checkbox"
                                             checked={selectedSenders.has(domain)}
                                             onChange={(e) => {
-                                                setSelectedSenders(prev => {
-                                                    const newSet = new Set(prev);
-                                                    if (e.target.checked) {
-                                                        newSet.add(domain);
-                                                    } else {
-                                                        newSet.delete(domain);
-                                                    }
-                                                    return newSet;
-                                                });
+                                                const newSet = new Set(selectedSenders);
+                                                if (e.target.checked) {
+                                                    newSet.add(domain);
+                                                } else {
+                                                    newSet.delete(domain);
+                                                }
+                                                setSelectedSenders(newSet);
                                             }}
                                         />
                                     </div>
@@ -337,14 +417,17 @@ function GmailSendersList() {
                                                     : 'Delete'}
                                             </span>
                                         </button>
-                                        <button
-                                            className="sender-action-button view"
-                                            onClick={() => handleSenderSelectionForLifetime(domain)}
-                                            disabled={isLoading}
-                                        >
-                                            <i className="fa-solid fa-eye icon"></i>
-                                            <span className="text">View</span>
-                                        </button>
+                                        <div className="view-button-container">
+                                            <button
+                                                className="sender-action-button view"
+                                                onClick={() => handleSenderSelectionForLifetime(domain)}
+                                                disabled={isLoading}
+                                            >
+                                                <i className="fa-solid fa-eye icon"></i>
+                                                <span className="text">View</span>
+                                            </button>
+                                            <span className="view-tooltip">Still working on this feature</span>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -352,15 +435,20 @@ function GmailSendersList() {
                         {totalPages > 1 && (
                             <div className="pagination">
                                 <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
-                                {Array.from({ length: totalPages }, (_, i) => (
-                                    <button
-                                        key={i + 1}
-                                        onClick={() => setCurrentPage(i + 1)}
-                                        className={currentPage === i + 1 ? 'active' : ''}
-                                    >
-                                        {i + 1}
-                                    </button>
-                                ))}
+                                {getPaginationItems(currentPage, totalPages).map((item, index) => {
+                                    if (item === '...') {
+                                        return <span key={index} className="pagination-ellipsis">...</span>;
+                                    }
+                                    return (
+                                        <button
+                                            key={index}
+                                            onClick={() => setCurrentPage(item)}
+                                            className={currentPage === item ? 'active' : ''}
+                                        >
+                                            {item}
+                                        </button>
+                                    );
+                                })}
                                 <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
                             </div>
                         )}
@@ -372,15 +460,6 @@ function GmailSendersList() {
                     <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
                 )}
             </div>
-            {(isDeleteInProgress) && (
-                <div className="deletion-progress-overlay">
-                    <div className="deletion-status">
-                        <i className="fa-solid fa-spinner fa-spin"></i>
-                        <p>Deleting emails from {deleteConfirmState.domain}</p>
-                        <p>{/* You can add progress here if available */}</p>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

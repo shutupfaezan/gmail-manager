@@ -3,6 +3,7 @@ import * as gmailService from '../services/gmailService';
 import { normalizeDomain } from '../utils/gmailUtils';
 import { processMessagesBatch } from './processMessagesBatch';
 import { useDeleteSender } from './useDeleteSender';
+import { useBulkDelete } from './useBulkDelete';
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -26,12 +27,14 @@ export const useGmailAnalysis = (accessToken) => {
     const [unsubscribeState, setUnsubscribeState] = useState({ isLoading: false, message: '', link: null, senderDomain: null });
     const [filterCreationState, setFilterCreationState] = useState({ isLoading: false, message: '', senderIdentifier: null });
     const [existingFilters, setExistingFilters] = useState(new Set());
+    const [selectedSenders, setSelectedSenders] = useState(new Set());
 
     const stopProcessingRef = useRef(false);
 
     const {
         deleteConfirmState,
         isDeleteInProgress,
+        isFinished: deleteProcessFinished,
         handleTrashAllFromSender,
         confirmDeleteAllFromSender,
         cancelDeleteAllFromSender,
@@ -42,6 +45,19 @@ export const useGmailAnalysis = (accessToken) => {
         setStage1SenderData,
         stopProcessingRef,
         setIsLoading,
+    });
+
+    const {
+        bulkDeleteState,
+        initiateBulkDelete,
+        confirmBulkDelete,
+        cancelBulkDelete,
+    } = useBulkDelete({
+        accessToken,
+        setActionMessage,
+        setIsBatchProcessing,
+        setStage1SenderData,
+        setSelectedSenders,
     });
 
     // --- Core Logic ---
@@ -122,7 +138,13 @@ export const useGmailAnalysis = (accessToken) => {
         return () => {
             stopProcessingRef.current = true;
         };
-    }, [accessToken, performStage1Analysis]);
+    }, [accessToken]);
+
+    useEffect(() => {
+        if (deleteProcessFinished) {
+            performStage1Analysis();
+        }
+    }, [deleteProcessFinished, performStage1Analysis]);
 
     // --- Placeholder Handlers for Other Features ---
     const handleSenderSelectionForLifetime = useCallback((domain) => {
@@ -274,5 +296,12 @@ export const useGmailAnalysis = (accessToken) => {
         handleCreateFilterForSender,
         existingFilters,
         isDeleteInProgress,
+        // for bulk delete
+        bulkDeleteState,
+        initiateBulkDelete,
+        confirmBulkDelete,
+        cancelBulkDelete,
+        selectedSenders,
+        setSelectedSenders,
     };
 };

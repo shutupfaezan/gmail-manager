@@ -11,8 +11,10 @@ export const useDeleteSender = ({
 }) => {
     const [deleteConfirmState, setDeleteConfirmState] = useState({ open: false, domain: null, messageIds: [], countLoading: false, deleteLoading: false });
     const [isDeleteInProgress, setIsDeleteInProgress] = useState(false);
+    const [isFinished, setIsFinished] = useState(false);
 
     const handleTrashAllFromSender = useCallback(async (domain) => {
+        setIsFinished(false);
         // Stop any ongoing analysis
         stopProcessingRef.current = true;
         setIsLoading(false);
@@ -35,6 +37,7 @@ export const useDeleteSender = ({
                 setDeleteConfirmState({ open: false, domain: null, messageIds: [], countLoading: false, deleteLoading: false });
                 setActionMessage(`No emails found from ${domain}.`);
                 stopProcessingRef.current = false; // Allow analysis to be restarted
+                setIsFinished(true);
                 return;
             }
 
@@ -52,6 +55,7 @@ export const useDeleteSender = ({
             setActionMessage(`Error: Could not retrieve emails from ${domain}.`);
             // Close the modal on error
             setDeleteConfirmState({ open: false, domain: null, messageIds: [], countLoading: false, deleteLoading: false });
+            setIsFinished(true);
         }
     }, [accessToken, setActionMessage, setIsLoading, stopProcessingRef]);
 
@@ -81,6 +85,7 @@ export const useDeleteSender = ({
             setDeleteConfirmState({ open: false, domain: null, messageIds: [], countLoading: false, deleteLoading: false });
             setIsDeleteInProgress(false);
             stopProcessingRef.current = false; // Allow analysis to be restarted
+            setIsFinished(true);
         }
     }, [accessToken, deleteConfirmState, setActionMessage, setIsBatchProcessing, setStage1SenderData, stopProcessingRef]);
 
@@ -88,11 +93,13 @@ export const useDeleteSender = ({
         // Simply close the dialog
         setDeleteConfirmState({ open: false, domain: null, messageIds: [], countLoading: false, deleteLoading: false });
         stopProcessingRef.current = false; // Allow analysis to be restarted if needed
+        setIsFinished(true);
     }, [stopProcessingRef]);
 
     return {
         deleteConfirmState,
         isDeleteInProgress,
+        isFinished,
         handleTrashAllFromSender,
         confirmDeleteAllFromSender,
         cancelDeleteAllFromSender,
