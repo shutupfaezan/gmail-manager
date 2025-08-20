@@ -17,6 +17,10 @@ async function authenticatedFetch(accessToken, url, options = {}) {
     });
 
     if (!response.ok) {
+        if (response.status === 401) {
+            sessionStorage.removeItem('googleAccessToken');
+            window.location.href = '/login';
+        }
         const errorData = await response.json().catch(() => ({ error: { message: response.statusText || 'Unknown API error structure' } }));
         console.error('API Error:', response.status, errorData);
         throw new Error(`API request failed: ${response.status} ${errorData.error?.message || response.statusText}`);

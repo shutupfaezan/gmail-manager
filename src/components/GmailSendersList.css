@@ -588,3 +588,25 @@
     visibility: visible;
     opacity: 1;
 }
+
+@media (max-width: 768px) {
+    .sender-row {
+        display: flex;
+        flex-wrap: wrap;
+        row-gap: 10px;
+    }
+
+    .sender-actions {
+        flex-basis: 100%;
+        justify-content: flex-start;
+    }
+
+    .view-button-container {
+        display: none;
+    }
+
+    .sender-actions .sender-action-button {
+        flex: 1;
+        justify-content: center;
+    }
+}
