@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <script type="text/javascript">
+    // Get the current path, removing the base URL if present
+    var path = window.location.pathname;
+    var base = '/gmail-manager'; // Replace with your repository name if different
+    if (path.startsWith(base)) {
+      path = path.substring(base.length);
+    }
+
+    // Redirect to index.html with the original path as a hash
+    window.location.replace(base + '/index.html#' + path);
+  </script>
+</head>
+<body>
+  If you are not redirected automatically, follow this <a href="/gmail-manager/">link to the application</a>.
+</body>
+</html>
