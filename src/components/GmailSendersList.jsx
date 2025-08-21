@@ -409,7 +409,7 @@ function GmailSendersList() {
                                             disabled={isDeleteInProgress || isBatchProcessing}
                                             style={{
                                                 opacity: (isDeleteInProgress || isBatchProcessing) ? 0.5 : 1,
-                                                backgroundColor: '#ff4444',
+                                                backgroundColor: '#ff7000',
                                                 color: 'white'
                                             }}
                                         >
