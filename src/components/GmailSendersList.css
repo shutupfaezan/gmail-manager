@@ -148,6 +148,7 @@
     font-weight: 600;
     font-size: 14px;
     border: none;
+    white-space: nowrap;
 }
 
 .action-button:disabled {
@@ -631,5 +632,34 @@
     .stat-card:nth-child(3),
     .stat-card:nth-child(4) {
         grid-row: 2;
+    }
+
+    .action-buttons-container {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .action-buttons {
+        width: 100%;
+        max-width: 100%;
+        flex-wrap: nowrap;
+        gap: 8px;
+        padding: 1rem;
+        box-sizing: border-box;
+    }
+
+    .action-button {
+        flex: 1;
+        min-width: 0;
+        padding: 0.5rem 1rem;
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .action-button .icon {
+        font-size: 12px;
     }
 }
