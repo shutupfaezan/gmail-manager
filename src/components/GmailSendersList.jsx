@@ -69,6 +69,8 @@ function GmailSendersList() {
         deleteConfirmState,
         existingFilters,
         isDeleteInProgress,
+        totalEmailsScanned,
+        totalEmailsDeleted,
         // for bulk delete
         bulkDeleteState,
         initiateBulkDelete,
@@ -278,7 +280,7 @@ function GmailSendersList() {
                     <div className='stat-card'>
                         <div className='stat-card-info'>
                             <span className='label'>Total Senders</span>
-                            <span className='value'>247</span>
+                            <span className='value'>{isLoading && Object.keys(stage1SenderData).length === 0 ? <div className="dotted-spinner"></div> : Object.keys(stage1SenderData).length}</span>
                         </div>
                         <div className='stat-card-icon'>
                             <i className="fa-solid fa-people-group" style={{ color: '#007bff' }}></i>
@@ -287,7 +289,7 @@ function GmailSendersList() {
                     <div className='stat-card'>
                         <div className='stat-card-info'>
                             <span className='label'>Total Emails</span>
-                            <span className='value'>247</span>
+                            <span className='value'>{isLoading && totalEmailsScanned === 0 ? <div className="dotted-spinner"></div> : totalEmailsScanned}</span>
                         </div>
                         <div className='stat-card-icon'>
                             <i className="fa-solid fa-envelope" style={{ color: '#28c267' }}></i>
@@ -296,7 +298,7 @@ function GmailSendersList() {
                     <div className='stat-card'>
                         <div className='stat-card-info'>
                             <span className='label'>Unsubscribed</span>
-                            <span className='value'>247</span>
+                            <span className='value'>{existingFilters.size}</span>
                         </div>
                         <div className='stat-card-icon'>
                             <i className="fa-solid fa-user-slash" style={{ color: '#de1717' }}></i>
@@ -305,7 +307,7 @@ function GmailSendersList() {
                     <div className='stat-card'>
                         <div className='stat-card-info'>
                             <span className='label'>Emails Deleted</span>
-                            <span className='value'>247</span>
+                            <span className='value'>{totalEmailsDeleted}</span>
                         </div>
                         <div className='stat-card-icon'>
                             <i className="fa-solid fa-trash" style={{ color: '#ff7000' }}></i>

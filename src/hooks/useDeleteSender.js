@@ -8,6 +8,7 @@ export const useDeleteSender = ({
     setStage1SenderData,
     stopProcessingRef,
     setIsLoading,
+    setTotalEmailsDeleted,
 }) => {
     const [deleteConfirmState, setDeleteConfirmState] = useState({ open: false, domain: null, messageIds: [], countLoading: false, deleteLoading: false });
     const [isDeleteInProgress, setIsDeleteInProgress] = useState(false);
@@ -75,6 +76,7 @@ export const useDeleteSender = ({
                 return newData;
             });
 
+            setTotalEmailsDeleted(prev => prev + deleteConfirmState.messageIds.length);
             setActionMessage(`Successfully deleted ${deleteConfirmState.messageIds.length} emails from ${deleteConfirmState.domain}.`);
 
         } catch (error) {
@@ -87,7 +89,7 @@ export const useDeleteSender = ({
             stopProcessingRef.current = false; // Allow analysis to be restarted
             setIsFinished(true);
         }
-    }, [accessToken, deleteConfirmState, setActionMessage, setIsBatchProcessing, setStage1SenderData, stopProcessingRef]);
+    }, [accessToken, deleteConfirmState, setActionMessage, setIsBatchProcessing, setStage1SenderData, stopProcessingRef, setTotalEmailsDeleted]);
 
     const cancelDeleteAllFromSender = useCallback(() => {
         // Simply close the dialog

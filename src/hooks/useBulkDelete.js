@@ -7,6 +7,7 @@ export const useBulkDelete = ({
     setIsBatchProcessing,
     setStage1SenderData,
     setSelectedSenders,
+    setTotalEmailsDeleted,
 }) => {
     const [bulkDeleteState, setBulkDeleteState] = useState({ open: false, senders: [], totalCount: 0, messageIds: [], loading: false });
 
@@ -47,6 +48,7 @@ export const useBulkDelete = ({
                 return newData;
             });
 
+            setTotalEmailsDeleted(prev => prev + bulkDeleteState.totalCount);
             setSelectedSenders(new Set()); // Clear selection
             setActionMessage(`Successfully deleted ${bulkDeleteState.totalCount} emails.`);
 
@@ -57,7 +59,7 @@ export const useBulkDelete = ({
             setBulkDeleteState({ open: false, senders: [], totalCount: 0, messageIds: [], loading: false });
             setIsBatchProcessing(false);
         }
-    }, [accessToken, bulkDeleteState, setActionMessage, setIsBatchProcessing, setStage1SenderData, setSelectedSenders]);
+    }, [accessToken, bulkDeleteState, setActionMessage, setIsBatchProcessing, setStage1SenderData, setSelectedSenders, setTotalEmailsDeleted]);
 
     const cancelBulkDelete = useCallback(() => {
         setBulkDeleteState({ open: false, senders: [], totalCount: 0, messageIds: [], loading: false });

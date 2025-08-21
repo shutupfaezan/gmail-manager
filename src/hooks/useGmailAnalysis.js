@@ -28,6 +28,7 @@ export const useGmailAnalysis = (accessToken) => {
     const [filterCreationState, setFilterCreationState] = useState({ isLoading: false, message: '', senderIdentifier: null });
     const [existingFilters, setExistingFilters] = useState(new Set());
     const [selectedSenders, setSelectedSenders] = useState(new Set());
+    const [totalEmailsDeleted, setTotalEmailsDeleted] = useState(0);
 
     const stopProcessingRef = useRef(false);
 
@@ -45,6 +46,7 @@ export const useGmailAnalysis = (accessToken) => {
         setStage1SenderData,
         stopProcessingRef,
         setIsLoading,
+        setTotalEmailsDeleted,
     });
 
     const {
@@ -58,7 +60,19 @@ export const useGmailAnalysis = (accessToken) => {
         setIsBatchProcessing,
         setStage1SenderData,
         setSelectedSenders,
+        setTotalEmailsDeleted,
     });
+
+    const [totalEmailsScanned, setTotalEmailsScanned] = useState(0);
+
+    useEffect(() => {
+        if (progress.includes('Analysis complete')) {
+            const matches = progress.match(/(\d+)/);
+            if (matches) {
+                setTotalEmailsScanned(parseInt(matches[0], 10));
+            }
+        }
+    }, [progress]);
 
     // --- Core Logic ---
 
@@ -103,6 +117,7 @@ export const useGmailAnalysis = (accessToken) => {
                     setStage1SenderData({ ...currentSenderDataAccumulator });
                     
                     totalProcessedMessages += messageIds.length;
+                    setTotalEmailsScanned(totalProcessedMessages);
                     setProgress(`Found ${Object.keys(currentSenderDataAccumulator).length} senders in ${totalProcessedMessages} emails...`);
                     
                     // Get next page token for continuation
@@ -296,6 +311,8 @@ export const useGmailAnalysis = (accessToken) => {
         handleCreateFilterForSender,
         existingFilters,
         isDeleteInProgress,
+        totalEmailsScanned,
+        totalEmailsDeleted,
         // for bulk delete
         bulkDeleteState,
         initiateBulkDelete,
