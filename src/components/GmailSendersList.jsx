@@ -336,6 +336,7 @@ function GmailSendersList() {
                         <div className='action-button delete' onClick={handleBulkDelete}><i className="fa-solid fa-trash icon"></i><span>Delete All Selected</span></div>
                     </div>
                 </div>
+                {/* Code error occurs below */}
                 <div className='senders-list'>
                 {sortedStage1DisplayData.length > 0 && !isDeleteInProgress && (
                     <section className='col d-flex flex-column bg-light'>
@@ -458,7 +459,6 @@ function GmailSendersList() {
                     </section>
                 )}
                 </div>
-                
                 {currentStage === 0 && !isLoading && !isBatchProcessing && Object.keys(stage1SenderData).length === 0 && lifetimeEmailsDisplay.length === 0 && (
                     <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
                 )}

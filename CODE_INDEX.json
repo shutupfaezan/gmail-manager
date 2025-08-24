@@ -1,0 +1,158 @@
+{
+  "generatedAt": "2025-08-24T00:00:00Z",
+  "repo": {
+    "name": "gmail-manager",
+    "path": "."
+  },
+  "summary": "Lightweight index of components, hooks, services, and utilities to answer questions about the codebase.",
+  "files": [
+    {
+      "path": "package.json",
+      "type": "manifest",
+      "exports": ["dependencies","devDependencies","scripts"],
+      "description": "Project manifest (React + Vite). Lists dependencies like react, react-dom, react-router-dom, bootstrap, jwt-decode etc.",
+      "important": {
+        "devScripts": ["dev","build","preview","lint","deploy"]
+      }
+    },
+    {
+      "path": "index.html",
+      "type": "static",
+      "description": "App entry HTML. Loads /src/main.jsx and Bootstrap + FontAwesome kits.",
+      "important": ["#root mount point","loads /src/main.jsx"]
+    },
+    {
+      "path": "src/main.jsx",
+      "type": "bootstrap",
+      "exports": ["default render"],
+      "description": "App bootstrap. Wraps <App /> in GoogleOAuthProvider and renders into #root. Uses VITE_GOOGLE_CLIENT_ID env var.",
+      "imports": ["./App.jsx","@react-oauth/google","bootstrap css/js"]
+    },
+    {
+      "path": "src/App.jsx",
+      "type": "component (router)",
+      "exports": ["default App"],
+      "description": "Top-level router. Provides protected route logic (ProtectedRoute) using sessionStorage googleAccessToken. Routes: /login -> Login, /gmail-all-senders -> GmailSendersList.",
+      "important": ["ProtectedRoute","RootRedirect"]
+    },
+    {
+      "path": "src/components/GmailSendersList.jsx",
+      "type": "component (React)",
+      "exports": ["default GmailSendersList"],
+      "description": "Main UI to display senders, stats, bulk actions, per-sender actions (unsubscribe, delete), pagination, status UI and modals. Heavy use of useGmailAnalysis hook.",
+      "keyHooksAndAPIs": ["useGmailAnalysis"],
+      "features": [
+        "pagination",
+        "bulk unsubscribe",
+        "bulk delete",
+        "per-sender unsubscribe",
+        "per-sender delete with modal confirmation",
+        "status indicators (isLoading, isBatchProcessing, progress, actionMessage)"
+      ]
+    },
+    {
+      "path": "src/components/Login.jsx",
+      "type": "component (React)",
+      "exports": ["default Login"],
+      "description": "Login page using useGoogleLogin from @react-oauth/google. Stores access_token in sessionStorage under 'googleAccessToken' and navigates to /gmail-all-senders on success.",
+      "features": ["redirect if already logged in","shows login error state"]
+    },
+    {
+      "path": "src/hooks/processMessagesBatch.js",
+      "type": "hook/helper",
+      "exports": ["processMessagesBatch"],
+      "signature": "async processMessagesBatch(accessToken, messageIds) => senderCounts",
+      "description": "Batches message ID fetches (metadata) and tallies senders using normalizeDomain. Uses gmailService.getMessage and sleeps between batches. Returns an object mapping domain->count.",
+      "edgeCases": ["empty token or empty messageIds returns {}"]
+    },
+    {
+      "path": "src/hooks/trashActions.js",
+      "type": "actions/services",
+      "exports": ["getAllMessageIdsFromSender","trashMessagesBatch","createUnsubscribeFilter","handleUnsubscribe"],
+      "description": "Actions for enumerating message IDs from a sender, batching trash operations, creating filters, and a combined unsubscribe-and-trash flow. Uses gmailService.listMessages, getAllMessageIdsFromSender, and gmailService.createFilter.",
+      "behaviors": ["paginated listing of messages","batch trash with progress updates","creates filter to move future emails to TRASH and optionally trashes existing messages"]
+    },
+    {
+      "path": "src/hooks/useBulkDelete.js",
+      "type": "hook",
+      "exports": ["useBulkDelete (default export object)"],
+      "description": "Hook to coordinate bulk delete flow: initiateBulkDelete computes message counts and messageId list for selected senders, confirmBulkDelete calls trashMessagesBatch and updates state, cancelBulkDelete cancels.",
+      "inputsOutputs": "accepts accessToken and setters; returns bulkDeleteState, initiateBulkDelete, confirmBulkDelete, cancelBulkDelete"
+    },
+    {
+      "path": "src/hooks/useDeleteSender.js",
+      "type": "hook",
+      "exports": ["useDeleteSender"],
+      "description": "Hook to manage per-sender deletion confirmation modal and action. Exposes handleTrashAllFromSender (open modal + count), confirmDeleteAllFromSender (perform trash), cancelDeleteAllFromSender.",
+      "stateManaged": ["deleteConfirmState","isDeleteInProgress","isFinished"]
+    },
+    {
+      "path": "src/hooks/useGmailAnalysis.js",
+      "type": "hook (core app logic)",
+      "exports": ["useGmailAnalysis"],
+      "description": "Core data and orchestration hook. Responsible for stage1 analysis (listing messages, processing batches), tracking progress, existing filters, selected senders, total counts and wiring delete/unsubscribe/bulk hooks.",
+      "returns": [
+        "stage1SenderData",
+        "isLoading",
+        "isBackgroundLoading",
+        "error",
+        "progress",
+        "currentStage",
+        "performStage1Analysis",
+        "lifetimeEmailsDisplay",
+        "actionMessage",
+        "isBatchProcessing",
+        "unsubscribeState",
+        "filterCreationState",
+        "handleTrashAllFromSender",
+        "confirmDeleteAllFromSender",
+        "cancelDeleteAllFromSender",
+        "handleAttemptUnsubscribe",
+        "existingFilters",
+        "totalEmailsScanned",
+        "totalEmailsDeleted,",
+        "bulk delete helpers and selection state"
+      ],
+      "notes": "Automatically runs performStage1Analysis when accessToken is available. Uses stopProcessingRef to interrupt scanning when deletions are started. Fetches existing filters on mount. Several placeholder or stubbed features (lifetime analysis)."
+    },
+    {
+      "path": "src/hooks/useGmailApi.js",
+      "type": "hook/wrapper",
+      "exports": ["useGmailApi"],
+      "description": "Light wrapper exposing listMessages, getMessageDetails, trashMessage, batchTrashMessages, createFilter that call into ../services/gmailService with the accessToken. Performs basic accessToken guard and error rethrowing.",
+      "signature": "useGmailApi(accessToken) => { listMessages, getMessageDetails, trashMessage, batchTrashMessages, createFilter }"
+    },
+    {
+      "path": "src/hooks/utils.js",
+      "type": "utility",
+      "exports": ["sleep"],
+      "description": "Tiny helper sleep(ms) returning a Promise to await delays."
+    },
+    {
+      "path": "src/services/gmailService.jsx",
+      "type": "service (API client)",
+      "exports": ["listMessages","getMessage","trashMessage","batchModifyMessages","listFilters","createFilter"],
+      "description": "Thin Gmail REST API client using fetch. Handles Authorization header, 401 redirect to /login, and JSON parsing. Base URL points to users/me.",
+      "notes": ["batchModify returns 204 No Content on success","authenticatedFetch will remove token and redirect on 401"]
+    },
+    {
+      "path": "src/utils/gmailUtils.js",
+      "type": "utilities",
+      "exports": ["sleep","normalizeDomain","getISOWeek","extractHttpUnsubscribeLink","extractSenderEmail"],
+      "description": "Utility functions to normalize domains from From headers, extract unsubscribe links, get ISO week strings and a sleep helper used across hooks and processors.",
+      "important": ["normalizeDomain handles various email header formats and returns a domain string like example.com or co.uk-aware third-levels"]
+    },
+    {
+      "path": "src/index.css",
+      "type": "style",
+      "description": "Global CSS (Urbanist font import and basic typographic rules)."
+    },
+    {
+      "path": "src/App.css",
+      "type": "style",
+      "description": "Empty file (exists but no content)."
+    }
+  ],
+  "notes": "This index captures exported symbols and responsibilities for quick reference. If you want a deeper symbol map (line numbers, props list per component, or TypeScript type stubs), tell me which files to expand and I'll produce a more detailed index.",
+  "coverage": "files read from provided workspace attachments. If you add or change files, regenerate this index by re-running the index step."
+}
