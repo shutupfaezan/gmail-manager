@@ -2,68 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useGmailAnalysis } from '../hooks/useGmailAnalysis';
 import './GmailSendersList.css';
 import mailIcon from '../assets/mail_icon.png';
-
-const stringToColor = (str) => {
-    // Generate a stable HSL color from an input string.
-    // Using HSL gives better, more perceptually even colors than raw hex from a small hash.
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = str.charCodeAt(i) + ((hash << 5) - hash);
-        hash = hash & hash; // keep in 32-bit int
-    }
-    const hue = Math.abs(hash) % 360;
-    const saturation = 50; // percent - lower saturation for a matte look
-    const lightness = 30; // percent - slightly lighter for better visibility
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-};
-
-const getPaginationItems = (currentPage, totalPages) => {
-    // Desired layout:
-    // Prev, 1, [current], [last], Next
-    // If current === 1 show the next page instead of duplicate (1,2,last)
-    // If current === last show previous page instead (1,last-1,last)
-    // For small total pages just show all pages.
-    if (totalPages <= 5) {
-        return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
-
-    const first = 1;
-    const last = totalPages;
-
-    if (currentPage === first) {
-        // 1, 2, last
-        return [first, first + 1, last];
-    }
-
-    if (currentPage === last) {
-        // 1, last-1, last
-        return [first, last - 1, last];
-    }
-
-    // Middle pages: show gaps with '...' when non-contiguous.
-    const items = [first];
-
-    // Always show the selected page immediately after the first page (no left-side '...').
-    if (currentPage !== first) {
-        if (currentPage === first + 1) {
-            items.push(first + 1);
-        } else {
-            items.push(currentPage);
-        }
-    }
-
-    // gap between current and last
-    if (last - currentPage > 1) {
-        if (last - currentPage === 2) {
-            items.push(last - 1);
-        } else {
-            items.push('...');
-        }
-    }
-
-    items.push(last);
-    return items;
-};
+import { stringToColor, getPaginationItems, processSenders } from '../logic/sendersPipeline';
 
 function GmailSendersList() {
     const accessToken = sessionStorage.getItem('googleAccessToken');
@@ -103,22 +42,9 @@ function GmailSendersList() {
     const [currentPage, setCurrentPage] = useState(1);
     const sendersPerPage = 10;
 
-    const sortedStage1DisplayData = useMemo(() => {
-        return Object.entries(stage1SenderData).sort((a, b) => {
-            const totalA = a[1].total || 0;
-            const totalB = b[1].total || 0;
-            return totalB - totalA;
-        });
-    }, [stage1SenderData]);
-
-    const totalPages = Math.ceil(sortedStage1DisplayData.length / sendersPerPage);
-
-    const paginatedSenders = useMemo(() => {
-        return sortedStage1DisplayData.slice(
-            (currentPage - 1) * sendersPerPage,
-            currentPage * sendersPerPage
-        );
-    }, [sortedStage1DisplayData, currentPage, sendersPerPage]);
+    const { sortedStage1DisplayData, paginatedSenders, totalPages } = useMemo(() => {
+        return processSenders(stage1SenderData, currentPage, sendersPerPage);
+    }, [stage1SenderData, currentPage, sendersPerPage]);
 
     const renderStatusBar = () => {
         if (isLoading || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
