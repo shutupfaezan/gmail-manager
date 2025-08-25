@@ -4,16 +4,17 @@ import './GmailSendersList.css';
 import mailIcon from '../assets/mail_icon.png';
 
 const stringToColor = (str) => {
+    // Generate a stable HSL color from an input string.
+    // Using HSL gives better, more perceptually even colors than raw hex from a small hash.
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        hash = hash & hash; // keep in 32-bit int
     }
-    let color = '#';
-    for (let i = 0; i < 3; i++) {
-        const value = (hash >> (i * 8)) & 0xFF;
-        color += ('00' + value.toString(16)).substr(-2);
-    }
-    return color;
+    const hue = Math.abs(hash) % 360;
+    const saturation = 50; // percent - lower saturation for a matte look
+    const lightness = 30; // percent - slightly lighter for better visibility
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
 const getPaginationItems = (currentPage, totalPages) => {
@@ -362,8 +363,9 @@ function GmailSendersList() {
                         </div>
                         {paginatedSenders.map(([domain, weeklyCounts]) => {
                             const totalForDomain = Object.values(weeklyCounts).reduce((sum, count) => sum + count, 0);
-                            const senderInitial = domain.charAt(0).toUpperCase();
-                            const avatarBg = stringToColor(senderInitial);
+                                const senderInitial = domain.charAt(0).toUpperCase();
+                                // Use full domain for color generation so colors vary per domain, not just by first letter
+                                const avatarBg = stringToColor(domain.toLowerCase().trim());
 
                             return (
                                 <div key={domain} className="sender-row">
