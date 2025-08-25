@@ -209,10 +209,7 @@ function GmailSendersList() {
         <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
             {renderDeleteConfirmModal()}
             {renderBulkDeleteConfirmModal()}
-            <div className="d-flex align-items-center py-3 bg-white shadow-sm justify-content-center">
-                <img src={mailIcon} alt="Gmail logo" style={{ width: '30px', height: '30px', marginRight: '8px' }} />
-                <span style={{ fontSize: '18px', fontWeight: '600', color: 'black' }}>Gmail Unsubscriber</span>
-            </div>
+            {/* Header moved to App.jsx for global use */}
             <div className="senders-list-container">
                 {renderStatusBar()}
                 {renderActionStatus()}

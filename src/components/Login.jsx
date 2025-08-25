@@ -58,11 +58,6 @@ function Login() {
 
     return (
     <div className="d-flex flex-column bg-light" style={{ minHeight: '100vh' }}>
-        {/* Header */}
-        <div className="d-flex align-items-center py-3 bg-white shadow-sm justify-content-center">
-            <img src={mailIcon} alt="Gmail logo" style={{ width: '30px', height: '30px', marginRight: '8px' }} />
-            <span style={{ fontSize: '18px', fontWeight: '600', color: 'black' }}>Gmail Unsubscriber</span>
-        </div>
         {/* Main Content Card */}
         <div className="flex-fill d-flex align-items-center justify-content-center">                
             <div className="p-4 " style={{ maxWidth: '600px', width: '100%', borderColor: '#e0e0e0' }}>
