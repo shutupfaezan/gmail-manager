@@ -17,32 +17,51 @@ const stringToColor = (str) => {
 };
 
 const getPaginationItems = (currentPage, totalPages) => {
-    const delta = 2;
-    const left = currentPage - delta;
-    const right = currentPage + delta + 1;
-    const range = [];
-    const rangeWithDots = [];
-    let l;
+    // Desired layout:
+    // Prev, 1, [current], [last], Next
+    // If current === 1 show the next page instead of duplicate (1,2,last)
+    // If current === last show previous page instead (1,last-1,last)
+    // For small total pages just show all pages.
+    if (totalPages <= 5) {
+        return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
 
-    for (let i = 1; i <= totalPages; i++) {
-        if (i === 1 || i === totalPages || (i >= left && i < right)) {
-            range.push(i);
+    const first = 1;
+    const last = totalPages;
+
+    if (currentPage === first) {
+        // 1, 2, last
+        return [first, first + 1, last];
+    }
+
+    if (currentPage === last) {
+        // 1, last-1, last
+        return [first, last - 1, last];
+    }
+
+    // Middle pages: show gaps with '...' when non-contiguous.
+    const items = [first];
+
+    // Always show the selected page immediately after the first page (no left-side '...').
+    if (currentPage !== first) {
+        if (currentPage === first + 1) {
+            items.push(first + 1);
+        } else {
+            items.push(currentPage);
         }
     }
 
-    for (let i of range) {
-        if (l) {
-            if (i - l === 2) {
-                rangeWithDots.push(l + 1);
-            } else if (i - l !== 1) {
-                rangeWithDots.push('...');
-            }
+    // gap between current and last
+    if (last - currentPage > 1) {
+        if (last - currentPage === 2) {
+            items.push(last - 1);
+        } else {
+            items.push('...');
         }
-        rangeWithDots.push(i);
-        l = i;
     }
 
-    return rangeWithDots;
+    items.push(last);
+    return items;
 };
 
 function GmailSendersList() {
@@ -275,7 +294,6 @@ function GmailSendersList() {
                 {error && !isLoading && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && (
                     <button onClick={performStage1Analysis} style={{ marginBottom: '15px', padding: '8px 15px' }}>Retry Full Analysis</button>
                 )}
-
                 <div className='stats-container'>
                     <div className='stat-card'>
                         <div className='stat-card-info'>
@@ -336,8 +354,7 @@ function GmailSendersList() {
                         <div className='action-button delete' onClick={handleBulkDelete}><i className="fa-solid fa-trash icon"></i><span>Delete All Selected</span></div>
                     </div>
                 </div>
-                {/* Code error occurs below */}
-                <div className='senders-list'>
+                <div className='senders-list my-4'>
                 {sortedStage1DisplayData.length > 0 && !isDeleteInProgress && (
                     <section className='col d-flex flex-column bg-light'>
                         <div className="senders-list-header">
@@ -436,8 +453,10 @@ function GmailSendersList() {
                                 </div>
                             );
                         })}
+
+                        {/* Code error occurs below */}
                         {totalPages > 1 && (
-                            <div className="pagination">
+                            <div className="pagination py-3">
                                 <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
                                 {getPaginationItems(currentPage, totalPages).map((item, index) => {
                                     if (item === '...') {
