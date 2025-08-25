@@ -232,7 +232,9 @@
 
 .sender-row {
     display: grid;
-    grid-template-columns: auto auto 1fr auto auto;
+    /* Make the central column able to shrink properly and allow ellipsis via minmax(0, 1fr) */
+    /* Reserve a fixed column for the email-count so it cannot wrap to the next line. */
+    grid-template-columns: auto auto minmax(0, 1fr) minmax(72px, 120px) auto;
     gap: 15px;
     align-items: center;
     padding: 15px;
@@ -293,6 +295,13 @@
     color: #666;
     font-size: 0.9em;
     margin-right: 15px;
+    /* Ensure the count doesn't wrap or get pushed to next line. Keep a minimum width and don't allow it to shrink. */
+    min-width: 64px;
+    max-width: 120px;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    justify-self: end;
 }
 
 .sender-actions {
@@ -597,24 +606,42 @@
 }
 
 @media (max-width: 768px) {
+    /* Use a two-row grid on small screens so the count stays on the same line as the sender info
+       and the action buttons sit on a full-width second row. */
     .sender-row {
-        display: flex;
-        flex-wrap: wrap;
-        row-gap: 10px;
+        display: grid;
+        grid-template-columns: auto 40px 1fr minmax(56px, 96px);
+        grid-template-rows: auto auto;
+        grid-template-areas:
+            "checkbox avatar info count"
+            "actions actions actions actions";
+        gap: 8px 12px;
         align-items: center;
+        padding: 12px;
     }
 
-    .sender-info {
-        flex-grow: 1;
-    }
+    .sender-row .checkbox-container { grid-area: checkbox; }
+    .sender-avatar { grid-area: avatar; }
+    .sender-info { grid-area: info; min-width: 0; }
 
     .sender-emails-count {
+        grid-area: count;
         padding-left: 1rem;
+        min-width: 56px;
+        text-align: right;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        justify-self: end;
     }
 
     .sender-actions {
-        flex-basis: 100%;
+        grid-area: actions;
+        justify-self: stretch;
+        width: 100%;
+        display: flex;
+        gap: 8px;
         justify-content: flex-start;
+        flex-wrap: nowrap;
     }
 
     .view-button-container {
