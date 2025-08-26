@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useGmailAnalysis } from '../hooks/useGmailAnalysis';
 import './GmailSendersList.css';
-import mailIcon from '../assets/mail_icon.png';
+import SynapseLogo from '../assets/Synapse_logo_NBG.png';
 import { stringToColor, getPaginationItems, processSenders } from '../logic/sendersPipeline';
 
 function GmailSendersList() {
@@ -209,7 +209,6 @@ function GmailSendersList() {
         <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
             {renderDeleteConfirmModal()}
             {renderBulkDeleteConfirmModal()}
-            {/* Header moved to App.jsx for global use */}
             <div className="senders-list-container">
                 {renderStatusBar()}
                 {renderActionStatus()}
