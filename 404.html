@@ -1,20 +1,17 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Redirecting...</title>
-  <script type="text/javascript">
-    // Get the current path, removing the base URL if present
-    var path = window.location.pathname;
-    var base = '/'; // Use root for custom domain
-    if (path.startsWith(base)) {
-      path = path.substring(base.length);
-    }
-    // Redirect to index.html with the original path as a hash
-    window.location.replace(base + 'index.html#' + path);
-  </script>
-</head>
-<body>
-  If you are not redirected automatically, follow this <a href="/gmail-manager/">link to the application</a>.
-</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  <link rel="icon" type="image/x-icon" href="/assets/favicon-DU9pH6e6.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Synapse Pro | Mail Manager</title>
+    <script src="https://kit.fontawesome.com/78b9613813.js" crossorigin="anonymous"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-LN+7fdVzj6u52u30Kp6M/trliBMCMKTyK833zpbD+pXdCLuTusPj697FH4R/5mcr" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q" crossorigin="anonymous"></script>
+    <script type="module" crossorigin src="/assets/index-J8h8snLM.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CUWcU9rB.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>
