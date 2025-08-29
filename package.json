@@ -3,10 +3,11 @@
   "private": false,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://shutupfaezan.github.io/gmail-manager/",
+  "homepage": "https://getsynapse.dev/",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+  "build": "vite build",
+  "postbuild": "node postbuild.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",

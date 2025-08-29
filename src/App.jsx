@@ -28,7 +28,7 @@ const RootRedirect = () => {
 
 function App() {
   return (
-    <BrowserRouter basename="/gmail-manager">
+    <BrowserRouter>
       <div style={{ minHeight: '100vh', position: 'relative'}}>
         <Header />
         <Routes>
