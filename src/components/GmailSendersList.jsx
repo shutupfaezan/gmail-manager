@@ -1,410 +1,396 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useGmailAnalysis } from '../hooks/useGmailAnalysis';
+import { useToast } from '../hooks/useToast';
 import './GmailSendersList.css';
-import SynapseLogo from '../assets/Synapse_logo_NBG.png';
-import { stringToColor, getPaginationItems, processSenders } from '../logic/sendersPipeline';
 
-function GmailSendersList() {
+const AVATAR_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
+const avatarColor = d => AVATAR_COLORS[d.charCodeAt(0) % AVATAR_COLORS.length];
+const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
+
+const ChevronL = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const ChevronR = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+
+// ── Toast container ──────────────────────────────────────────
+function Toasts({ toasts }) {
+    const ic = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+    const cl = { success: '#10b981', error: '#ef4444', info: '#3b82f6', warning: '#f59e0b' };
+    return (
+        <div className="toast-container">
+            {toasts.map(t => (
+                <div key={t.id} className={t.out ? 't-out' : 't-in'}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10,
+                        background: 'white', borderRadius: 12,
+                        boxShadow: '0 8px 28px rgba(0,0,0,.14)',
+                        padding: '12px 16px',
+                        borderLeft: `4px solid ${cl[t.type]}`,
+                        pointerEvents: 'auto' }}>
+                    <span className="toast-icon" style={{ color: cl[t.type] }}>{ic[t.type]}</span>
+                    <span className="toast-msg">{t.msg}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ── Stat card ────────────────────────────────────────────────
+function StatCard({ label, value, icon, accent, loading, delay = 0 }) {
+    const bgs = { '#3b82f6': '#eff6ff', '#10b981': '#ecfdf5', '#ef4444': '#fef2f2', '#f59e0b': '#fffbeb' };
+    return (
+        <div className="stat-card fu" style={{ borderTop: `3px solid ${accent}`, animationDelay: `${delay}ms` }}>
+            <div className="stat-card-info">
+                <div className="stat-label">
+                    {loading ? <div className="sk" style={{ width: 60, height: 9 }}/> : label}
+                </div>
+                <div className="stat-value">
+                    {loading ? <div className="sk" style={{ width: 50, height: 26, marginTop: 4 }}/> : value}
+                </div>
+            </div>
+            <div className="stat-icon" style={{ background: loading ? '#f1f5f9' : bgs[accent] }}>
+                {loading ? <div className="sk" style={{ width: 40, height: 40, borderRadius: 10 }}/> : icon}
+            </div>
+        </div>
+    );
+}
+
+// ── Skeleton row ─────────────────────────────────────────────
+function SkeletonRow() {
+    return (
+        <div className="skeleton-row">
+            <div className="skeleton-row-top">
+                <div className="sk" style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0 }}/>
+                <div className="sk" style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0 }}/>
+                <div style={{ flex: 1 }}>
+                    <div className="sk" style={{ width: '55%', height: 13, marginBottom: 6 }}/>
+                    <div className="sk" style={{ width: '40%', height: 10 }}/>
+                </div>
+                <div className="sk" style={{ width: 48, height: 22, borderRadius: 99 }}/>
+            </div>
+            <div className="skeleton-actions">
+                <div className="sk" style={{ width: 64, height: 30, borderRadius: 8 }}/>
+                <div className="sk" style={{ width: 64, height: 30, borderRadius: 8 }}/>
+            </div>
+        </div>
+    );
+}
+
+// ── Delete modal (bottom sheet) ───────────────────────────────
+function DeleteModal({ state, onConfirm, onCancel }) {
+    if (!state.open) return null;
+    const { domain, messageIds, countLoading, deleteLoading, bulk, senders, totalCount, loading } = state;
+
+    const isBulk = !!bulk;
+    const phase = (isBulk ? loading : countLoading) ? 'counting'
+        : deleteLoading ? 'deleting'
+        : 'confirm';
+
+    const emailCount = isBulk ? totalCount : (messageIds?.length || 0);
+    const senderLabel = isBulk ? `${senders?.length} senders` : domain;
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+            <div className="modal-sheet">
+                <div className="modal-handle"/>
+                <button className="modal-close" onClick={onCancel}>✕</button>
+                <h2 className="modal-title">{isBulk ? 'Bulk Delete' : 'Delete Emails'}</h2>
+
+                {phase === 'counting' && (
+                    <div className="modal-spinner-wrap">
+                        <div className="modal-spinner"/>
+                        <p className="modal-counting-text">
+                            Counting emails from {senderLabel}…
+                        </p>
+                    </div>
+                )}
+
+                {phase === 'confirm' && (
+                    <>
+                        <div className="modal-count-box">
+                            <div className="modal-count-num">{emailCount.toLocaleString()}</div>
+                            <div className="modal-count-sub">emails from {senderLabel}</div>
+                        </div>
+                        <p className="modal-warning">⚠ This action cannot be undone.</p>
+                        <button className="modal-btn-confirm" onClick={onConfirm}>
+                            Delete {emailCount.toLocaleString()} Emails
+                        </button>
+                        <button className="modal-btn-cancel" onClick={onCancel}>Cancel</button>
+                    </>
+                )}
+
+                {phase === 'deleting' && (
+                    <div>
+                        <p className="modal-counting-text" style={{ textAlign: 'center', marginBottom: 0 }}>
+                            Deleting {emailCount.toLocaleString()} emails…
+                        </p>
+                        <div className="modal-progress-track">
+                            <div className="modal-progress-fill"/>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Main dashboard ────────────────────────────────────────────
+function GmailSendersList({ searchQuery = '' }) {
     const accessToken = sessionStorage.getItem('googleAccessToken');
+    const { toasts, add: addToast } = useToast();
 
     const {
         stage1SenderData,
-        currentStage,
-        lifetimeEmailsDisplay,
-        handleSenderSelectionForLifetime,
         isLoading,
         error,
         progress,
-        actionMessage,
-        setActionMessage,
+        progressPct,
+        performStage1Analysis,
         isBatchProcessing,
         unsubscribeState,
-        filterCreationState,
-        performStage1Analysis,
         handleTrashAllFromSender,
-        handleAttemptUnsubscribe,
         confirmDeleteAllFromSender,
         cancelDeleteAllFromSender,
         deleteConfirmState,
+        handleAttemptUnsubscribe,
         existingFilters,
         isDeleteInProgress,
         totalEmailsScanned,
         totalEmailsDeleted,
-        // for bulk delete
         bulkDeleteState,
         initiateBulkDelete,
         confirmBulkDelete,
         cancelBulkDelete,
         selectedSenders,
         setSelectedSenders,
-    } = useGmailAnalysis(accessToken);
+    } = useGmailAnalysis(accessToken, addToast);
 
-    const [currentPage, setCurrentPage] = useState(1);
-    const sendersPerPage = 10;
+    const [page, setPage] = useState(1);
+    const PER_PAGE = 10;
 
-    const { sortedStage1DisplayData, paginatedSenders, totalPages } = useMemo(() => {
-        return processSenders(stage1SenderData, currentPage, sendersPerPage);
-    }, [stage1SenderData, currentPage, sendersPerPage]);
+    // Sort by count desc, filter by search
+    const sorted = useMemo(() => {
+        return Object.entries(stage1SenderData)
+            .map(([domain, data]) => [domain, data.total || 0])
+            .sort((a, b) => b[1] - a[1]);
+    }, [stage1SenderData]);
 
-    const renderStatusBar = () => {
-        if (isLoading || isBatchProcessing || unsubscribeState.isLoading || filterCreationState.isLoading) {
-            return (
-                <div className="status-bar">
-                    <div className="spinner-border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                    </div>
-                    <span>
-                        {filterCreationState.isLoading
-                            ? filterCreationState.message
-                            : progress
-                            ? progress
-                            : 'Processing...'}
-                    </span>
-                    <span className="text-muted" style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
-                        {isLoading && 'Loading data...'}
-                        {unsubscribeState.isLoading && 'Processing unsubscribe...'}
-                        {filterCreationState.isLoading && 'Creating filter...'}
-                    </span>
-                </div>
-            );
-        }
-        return null;
-    };
+    const filtered = useMemo(() => {
+        if (!searchQuery) return sorted;
+        return sorted.filter(([d]) => d.toLowerCase().includes(searchQuery.toLowerCase()));
+    }, [sorted, searchQuery]);
 
-    const renderActionStatus = () => {
-        if (!actionMessage) return null;
-        const isError = actionMessage.toLowerCase().startsWith("error");
-        return (
-            <div className={`action-status ${isError ? 'error' : 'success'}`}>
-                {actionMessage}
-            </div>
-        );
-    };
+    React.useEffect(() => { setPage(1); }, [searchQuery]);
 
-    const renderFilterCreationStatus = () => {
-        if (!filterCreationState.senderIdentifier || (!filterCreationState.isLoading && !filterCreationState.message)) return null;
-        const isError = filterCreationState.message && filterCreationState.message.toLowerCase().startsWith("error");
-        return <div className={`filter-creation-status ${isError ? 'error' : 'success'}`}>{filterCreationState.isLoading ? `Processing filter for ${filterCreationState.senderIdentifier}...` : filterCreationState.message}</div>;
-    };
+    const totalPages = Math.ceil(filtered.length / PER_PAGE);
+    const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
-    const renderUnsubscribeStatus = () => {
-        if (!unsubscribeState.senderDomain || (!unsubscribeState.isLoading && !unsubscribeState.message && !unsubscribeState.link)) return null;
-        return <div className="unsubscribe-status">{unsubscribeState.isLoading ? `Checking unsubscribe for ${unsubscribeState.senderDomain}...` : unsubscribeState.message}</div>;
-    };
+    const allOnPageSelected = paged.length > 0 && paged.every(([d]) => selectedSenders.has(d));
+    const someOnPageSelected = paged.some(([d]) => selectedSenders.has(d));
 
-    // Deletion Modal
-    const renderDeleteConfirmModal = () => {
-        if (!deleteConfirmState.open) return null;
+    const handleSelectAll = useCallback(() => {
+        setSelectedSenders(prev => {
+            const next = new Set(prev);
+            paged.forEach(([d]) => allOnPageSelected ? next.delete(d) : next.add(d));
+            return next;
+        });
+    }, [paged, allOnPageSelected, setSelectedSenders]);
 
-        const { countLoading, deleteLoading, domain, messageIds } = deleteConfirmState;
-
-        return (
-            <div className="modal-overlay">
-                <div className="modal-content delete-modal-content">
-                    <h4>Delete Emails</h4>
-                    {countLoading ? (
-                        <div>
-                            <p>Loading emails from <b>{domain}</b>...</p>
-                            <div className="dotted-spinner"></div>
-                        </div>
-                    ) : deleteLoading ? (
-                        <div>
-                            <p>Deleting <b>{messageIds.length}</b> emails from <b>{domain}</b>...</p>
-                            <div className="dotted-spinner"></div>
-                        </div>
-                    ) : (
-                        <div>
-                            <p>Found <b>{messageIds.length}</b> emails from <b>{domain}</b>.</p>
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', alignItems: 'center', justifyContent: 'center' }}>
-                                <button className="btn btn-danger" onClick={confirmDeleteAllFromSender}>
-                                    Yes
-                                </button>
-                                <span className="cancel-link" onClick={cancelDeleteAllFromSender}>No</span>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    const renderBulkDeleteConfirmModal = () => {
-        if (!bulkDeleteState.open) return null;
-
-        const { loading, totalCount, senders } = bulkDeleteState;
-
-        return (
-            <div className="modal-overlay">
-                <div className="modal-content delete-modal-content">
-                    <h4>Bulk Delete</h4>
-                    {loading ? (
-                        <div>
-                            <p>Counting emails from <b>{senders.length}</b> senders...</p>
-                            <div className="dotted-spinner"></div>
-                        </div>
-                    ) : (
-                        <div>
-                            <p>Found a total of <b>{totalCount}</b> emails from <b>{senders.length}</b> selected senders.</p>
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', alignItems: 'center', justifyContent: 'center' }}>
-                                <button className="btn btn-danger" onClick={confirmBulkDelete}>
-                                    Delete {totalCount} Emails
-                                </button>
-                                <button className="btn btn-secondary" onClick={cancelBulkDelete}>Cancel</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    const handleBulkUnsubscribe = useCallback(async (e) => {
-        e.preventDefault();
-        if (selectedSenders.size === 0) {
-            setActionMessage('Please select senders to unsubscribe from');
-            return;
-        }
-
-        const sendersArray = Array.from(selectedSenders);
+    const handleBulkFilter = useCallback(async () => {
+        const arr = [...selectedSenders];
         let processed = 0;
-
-        try {
-            setActionMessage(`Processing ${sendersArray.length} senders...`);
-
-            for (const domain of sendersArray) {
-                try {
-                    await handleAttemptUnsubscribe(domain);
-                    processed++;
-                    setActionMessage(`Processed ${processed} of ${sendersArray.length}: ${domain}`);
-                } catch (error) {
-                    console.error(`Failed to process ${domain}:`, error);
-                    continue; // Continue with next sender even if one fails
-                }
-            }
-
-            setActionMessage(`Completed processing ${processed} senders`);
-            setSelectedSenders(new Set()); // Clear selections after completion
-        } catch (error) {
-            console.error('Bulk operation failed:', error);
-            setActionMessage(`Bulk operation failed: ${error.message}`);
+        for (const domain of arr) {
+            try {
+                await handleAttemptUnsubscribe(domain);
+                processed++;
+            } catch (_) {}
         }
-    }, [selectedSenders, setActionMessage, handleAttemptUnsubscribe]);
+        setSelectedSenders(new Set());
+    }, [selectedSenders, handleAttemptUnsubscribe, setSelectedSenders]);
 
-    const handleIndividualDelete = useCallback((domain) => {
-        if (isBatchProcessing || isDeleteInProgress) {
-            return;
-        }
-        handleTrashAllFromSender(domain);
+    const handleBulkDelete = useCallback(() => {
+        if (selectedSenders.size === 0) return;
+        initiateBulkDelete(selectedSenders);
+    }, [selectedSenders, initiateBulkDelete]);
+
+    const handleIndividualDelete = useCallback(d => {
+        if (isBatchProcessing || isDeleteInProgress) return;
+        handleTrashAllFromSender(d);
     }, [isBatchProcessing, isDeleteInProgress, handleTrashAllFromSender]);
 
-    const handleBulkDelete = () => {
-        if (selectedSenders.size === 0) {
-            setActionMessage('Please select senders to delete.');
-            return;
-        }
-        initiateBulkDelete(selectedSenders);
-    };
+    // Combine delete modals — single sender uses deleteConfirmState, bulk uses bulkDeleteState
+    const modalState = bulkDeleteState?.open
+        ? { ...bulkDeleteState, bulk: true }
+        : deleteConfirmState;
+
+    const handleModalConfirm = bulkDeleteState?.open ? confirmBulkDelete : confirmDeleteAllFromSender;
+    const handleModalCancel  = bulkDeleteState?.open ? cancelBulkDelete  : cancelDeleteAllFromSender;
+
+    const hasSenders = filtered.length > 0;
+    const showSkeletons = isLoading && sorted.length === 0;
 
     return (
-        <div className="d-flex flex-column bg-light" style={{minHeight: '100vh'}}>
-            {renderDeleteConfirmModal()}
-            {renderBulkDeleteConfirmModal()}
-            <div className="senders-list-container">
-                {renderStatusBar()}
-                {renderActionStatus()}
-                {renderFilterCreationStatus()}
-                {renderUnsubscribeStatus()}
-                {error && !isLoading && !isBatchProcessing && !unsubscribeState.isLoading && !filterCreationState.isLoading && (
-                    <button onClick={performStage1Analysis} style={{ marginBottom: '15px', padding: '8px 15px' }}>Retry Full Analysis</button>
+        <div className="dashboard-root" style={{ paddingBottom: selectedSenders.size > 0 ? 100 : 0 }}>
+            <Toasts toasts={toasts}/>
+            <DeleteModal
+                state={modalState || { open: false }}
+                onConfirm={handleModalConfirm}
+                onCancel={handleModalCancel}
+            />
+
+            <main className="dashboard-main">
+
+                {/* Progress bar */}
+                {isLoading && (
+                    <div className="progress-card fu">
+                        <div className="progress-card-header">
+                            <span className="progress-label">{progress || 'Analyzing emails…'}</span>
+                            <span className="progress-pct">{progressPct}%</span>
+                        </div>
+                        <div className="progress-track">
+                            <div className="progress-fill" style={{ width: `${progressPct}%` }}/>
+                        </div>
+                    </div>
                 )}
-                <div className='stats-container'>
-                    <div className='stat-card'>
-                        <div className='stat-card-info'>
-                            <span className='label'>Total Senders</span>
-                            <span className='value'>{isLoading && Object.keys(stage1SenderData).length === 0 ? <div className="dotted-spinner"></div> : Object.keys(stage1SenderData).length}</span>
-                        </div>
-                        <div className='stat-card-icon'>
-                            <i className="fa-solid fa-people-group" style={{ color: '#007bff' }}></i>
-                        </div>
-                    </div>
-                    <div className='stat-card'>
-                        <div className='stat-card-info'>
-                            <span className='label'>Total Emails</span>
-                            <span className='value'>{isLoading && totalEmailsScanned === 0 ? <div className="dotted-spinner"></div> : totalEmailsScanned}</span>
-                        </div>
-                        <div className='stat-card-icon'>
-                            <i className="fa-solid fa-envelope" style={{ color: '#28c267' }}></i>
-                        </div>
-                    </div>
-                    <div className='stat-card'>
-                        <div className='stat-card-info'>
-                            <span className='label'>Unsubscribed</span>
-                            <span className='value'>{existingFilters.size}</span>
-                        </div>
-                        <div className='stat-card-icon'>
-                            <i className="fa-solid fa-user-slash" style={{ color: '#de1717' }}></i>
-                        </div>
-                    </div>
-                    <div className='stat-card'>
-                        <div className='stat-card-info'>
-                            <span className='label'>Emails Deleted</span>
-                            <span className='value'>{totalEmailsDeleted}</span>
-                        </div>
-                        <div className='stat-card-icon'>
-                            <i className="fa-solid fa-trash" style={{ color: '#ff7000' }}></i>
-                        </div>
-                    </div>
-                </div>
-                <div className='action-buttons-container'>
-                    <div className='action-buttons'>
-                        <div 
-                            className='action-button unsubscribe'
-                            onClick={handleBulkUnsubscribe}
-                            style={{ 
-                                cursor: selectedSenders.size === 0 ? 'not-allowed' : 'pointer',
-                                opacity: selectedSenders.size === 0 ? 0.6 : 1,
-                                backgroundColor: '#dc3545',
-                                color: 'white'
-                            }}
-                        >
-                            <i className="fa-solid fa-user-slash icon"></i>
-                            <span>
-                                {unsubscribeState.isLoading 
-                                    ? `Processing... (${unsubscribeState.senderDomain})` 
-                                    : `Bulk Unsubscribe ${selectedSenders.size ? `(${selectedSenders.size})` : ''}`}
-                            </span>
-                        </div>
-                        <div className='action-button delete' onClick={handleBulkDelete}><i className="fa-solid fa-trash icon"></i><span>Delete All Selected</span></div>
-                    </div>
-                </div>
-                <div className='senders-list my-4'>
-                {sortedStage1DisplayData.length > 0 && !isDeleteInProgress && (
-                    <section className='col d-flex flex-column bg-light'>
-                        <div className="senders-list-header">
-                            <span className='fw-bold'>Email Senders</span>
-                        </div>
-                        {paginatedSenders.map(([domain, weeklyCounts]) => {
-                            const totalForDomain = Object.values(weeklyCounts).reduce((sum, count) => sum + count, 0);
-                                const senderInitial = domain.charAt(0).toUpperCase();
-                                // Use full domain for color generation so colors vary per domain, not just by first letter
-                                const avatarBg = stringToColor(domain.toLowerCase().trim());
 
-                            return (
-                                <div key={domain} className="sender-row">
-                                    <div className="checkbox-container">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedSenders.has(domain)}
-                                            onChange={(e) => {
-                                                const newSet = new Set(selectedSenders);
-                                                if (e.target.checked) {
-                                                    newSet.add(domain);
-                                                } else {
-                                                    newSet.delete(domain);
-                                                }
-                                                setSelectedSenders(newSet);
-                                            }}
-                                        />
-                                    </div>
-                                    <div className="sender-avatar" style={{ backgroundColor: avatarBg }}>
-                                        {senderInitial}
-                                    </div>
-                                    <div className="sender-info">
-                                        <div className="domain">{domain}</div>
-                                        <div className="email">noreply@{domain}</div>
-                                    </div>
-                                    <div className="sender-emails-count">
-                                        {totalForDomain} <span className="label">emails</span>
-                                    </div>
-                                    <div className="sender-actions">
-                                        <button
-                                            className="sender-action-button unsubscribe"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                handleAttemptUnsubscribe(domain);
-                                            }}
-                                            disabled={existingFilters.has(domain) || 
-                                                (unsubscribeState.isLoading && unsubscribeState.senderDomain === domain)}
-                                            style={{
-                                                opacity: existingFilters.has(domain) ? 0.5 : 1,
-                                                backgroundColor: existingFilters.has(domain) ? '#aaa' : '#dc3545',
-                                                color: 'white'
-                                            }}
-                                        >
-                                            <i className="fa-solid fa-user-slash icon"></i>
-                                            <span className="text">
-                                                {existingFilters.has(domain) 
-                                                    ? 'Already Filtered' 
-                                                    : unsubscribeState.isLoading && unsubscribeState.senderDomain === domain 
-                                                        ? 'Processing...' 
-                                                        : 'Unsubscribe'}
-                                            </span>
-                                        </button>
-                                        <button
-                                            className="sender-action-button delete"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                handleIndividualDelete(domain);
-                                            }}
-                                            disabled={isDeleteInProgress || isBatchProcessing}
-                                            style={{
-                                                opacity: (isDeleteInProgress || isBatchProcessing) ? 0.5 : 1,
-                                                backgroundColor: '#ff7000',
-                                                color: 'white'
-                                            }}
-                                        >
-                                            <i className="fa-solid fa-trash icon"></i>
-                                            <span className="text">
-                                                {isDeleteInProgress && deleteConfirmState.domain === domain 
-                                                    ? `Deleting...` 
-                                                    : 'Delete'}
-                                            </span>
-                                        </button>
-                                        <div className="view-button-container">
-                                            <button
-                                                className="sender-action-button view"
-                                                onClick={() => handleSenderSelectionForLifetime(domain)}
-                                                disabled={isLoading}
-                                            >
-                                                <i className="fa-solid fa-eye icon"></i>
-                                                <span className="text">View</span>
-                                            </button>
-                                            <span className="view-tooltip">Still working on this feature</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                {/* Error */}
+                {error && !isLoading && (
+                    <div className="error-card">
+                        <p className="error-msg">{error}</p>
+                        <button className="btn-retry" onClick={performStage1Analysis}>Retry Analysis</button>
+                    </div>
+                )}
 
-                        {/* Code error occurs below */}
-                        {totalPages > 1 && (
-                            <div className="pagination py-3">
-                                <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
-                                {getPaginationItems(currentPage, totalPages).map((item, index) => {
-                                    if (item === '...') {
-                                        return <span key={index} className="pagination-ellipsis">...</span>;
-                                    }
-                                    return (
-                                        <button
-                                            key={index}
-                                            onClick={() => setCurrentPage(item)}
-                                            className={currentPage === item ? 'active' : ''}
-                                        >
-                                            {item}
-                                        </button>
-                                    );
-                                })}
-                                <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
-                            </div>
+                {/* Stat cards */}
+                <div className="stats-grid">
+                    <StatCard label="Senders"  value={sorted.length}                   icon="👥" accent="#3b82f6" loading={isLoading && sorted.length === 0} delay={0}/>
+                    <StatCard label="Scanned"  value={fmt(totalEmailsScanned)}          icon="✉️" accent="#10b981" loading={isLoading && totalEmailsScanned === 0} delay={50}/>
+                    <StatCard label="Filtered" value={existingFilters.size}             icon="🚫" accent="#ef4444" loading={false} delay={100}/>
+                    <StatCard label="Deleted"  value={fmt(totalEmailsDeleted)}          icon="🗑️" accent="#f59e0b" loading={false} delay={150}/>
+                </div>
+
+                {/* Sender list */}
+                <div className="senders-card">
+                    {/* Header */}
+                    <div className="senders-card-header">
+                        <input type="checkbox"
+                            checked={allOnPageSelected}
+                            ref={el => { if (el) el.indeterminate = someOnPageSelected && !allOnPageSelected; }}
+                            onChange={handleSelectAll}
+                            style={{ width: 18, height: 18, accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <span className="senders-card-header-label">EMAIL SENDERS</span>
+                        {selectedSenders.size > 0 && (
+                            <span className="sel-badge">{selectedSenders.size} selected</span>
                         )}
-                    </section>
-                )}
+                        <span className="total-count">{filtered.length} total</span>
+                    </div>
+
+                    {/* Empty state */}
+                    {!hasSenders && !showSkeletons && !isLoading && (
+                        <div className="empty-state">
+                            <div className="empty-icon">📭</div>
+                            <p className="empty-title">{searchQuery ? 'No senders found' : 'No data yet'}</p>
+                            <p className="empty-sub">{searchQuery ? 'Try a different search' : 'Analysis complete or retry above'}</p>
+                        </div>
+                    )}
+
+                    {/* Skeletons */}
+                    {showSkeletons && [0,1,2,3].map(i => <SkeletonRow key={i}/>)}
+
+                    {/* Rows */}
+                    {paged.map(([domain, count]) => (
+                        <SenderRow
+                            key={domain}
+                            domain={domain}
+                            count={count}
+                            isFiltered={existingFilters.has(domain)}
+                            isUnsubbing={unsubscribeState.isLoading && unsubscribeState.senderDomain === domain}
+                            selected={selectedSenders.has(domain)}
+                            onToggle={() => {
+                                setSelectedSenders(prev => {
+                                    const n = new Set(prev);
+                                    n.has(domain) ? n.delete(domain) : n.add(domain);
+                                    return n;
+                                });
+                            }}
+                            onFilter={() => handleAttemptUnsubscribe(domain)}
+                            onDelete={() => handleIndividualDelete(domain)}
+                            isDeleting={isDeleteInProgress && deleteConfirmState?.domain === domain}
+                            disableDelete={isDeleteInProgress || isBatchProcessing}
+                        />
+                    ))}
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                        <div className="pagination-bar">
+                            <button className="pagination-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+                                <ChevronL/> Prev
+                            </button>
+                            <span className="pagination-counter">{page} / {totalPages}</span>
+                            <button className="pagination-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
+                                Next <ChevronR/>
+                            </button>
+                        </div>
+                    )}
                 </div>
-                {currentStage === 0 && !isLoading && !isBatchProcessing && Object.keys(stage1SenderData).length === 0 && lifetimeEmailsDisplay.length === 0 && (
-                    <p>Analysis complete or no data found. Click "Retry" or re-login if needed.</p>
-                )}
+            </main>
+
+            {/* Fixed bulk action bar */}
+            {selectedSenders.size > 0 && (
+                <div className="bulk-bar">
+                    <div className="bulk-bar-inner">
+                        <div className="bulk-bar-meta">
+                            <span className="bulk-sel-count">
+                                <strong>{selectedSenders.size}</strong> selected
+                            </span>
+                            <button className="bulk-clear-btn" onClick={() => setSelectedSenders(new Set())}>
+                                Clear
+                            </button>
+                        </div>
+                        <div className="bulk-actions-grid">
+                            <button className="bulk-btn-filter" onClick={handleBulkFilter}>
+                                🚫 Filter ({selectedSenders.size})
+                            </button>
+                            <button className="bulk-btn-delete" onClick={handleBulkDelete}>
+                                🗑️ Delete ({selectedSenders.size})
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Sender row (extracted for clarity) ───────────────────────
+function SenderRow({ domain, count, isFiltered, isUnsubbing, selected, onToggle, onFilter, onDelete, isDeleting, disableDelete }) {
+    const [hovered, setHovered] = useState(false);
+    const cls = ['sender-row', selected ? 'selected' : '', hovered && !selected ? 'hovered' : ''].filter(Boolean).join(' ');
+
+    return (
+        <div className={cls}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}>
+            <div className="sender-row-top">
+                <input type="checkbox" checked={selected} onChange={onToggle}
+                    style={{ width: 18, height: 18, accentColor: 'var(--primary)', flexShrink: 0, cursor: 'pointer' }}/>
+                <div className="sender-avatar" style={{ background: avatarColor(domain) }}>
+                    {domain[0].toUpperCase()}
+                </div>
+                <div className="sender-info">
+                    <div className="sender-domain">{domain}</div>
+                    <div className="sender-email">@{domain}</div>
+                </div>
+                <div className="count-pill">{fmt(count)}</div>
+            </div>
+            <div className="sender-actions">
+                {isFiltered
+                    ? <span className="filtered-badge">✓ Filtered</span>
+                    : <button className="btn-filter" onClick={onFilter} disabled={isUnsubbing}>
+                        {isUnsubbing ? '…' : 'Filter'}
+                    </button>
+                }
+                <button className="btn-delete" onClick={onDelete} disabled={disableDelete}>
+                    {isDeleting ? '…' : 'Delete'}
+                </button>
             </div>
         </div>
     );
